@@ -1,0 +1,5 @@
+[project]
+name = "openstack_supr_sync"
+version = "0.1.0"
+dependencies = ['requests',
+                'pyyaml']
