@@ -1,15 +1,5 @@
-
-import re
 import datetime
-
-from bureaucracy.ldap_utils import *
-from bureaucracy.models import ProjectRequest, Project, UserRequest, User, AccountRequest, Account, \
-    UnixGroup, Resource, Allocation, Queue, get_globals
-from bureaucracy.supr import SUPR, SUPRHTTPError
-from bureaucracy.pdb import pdbemail, pdbpnr, pdblookup
-from django.contrib.auth.models import User as DjangoUser
-from django.db.models import Q
-from .utils import has_private_queue, pnr_to_dob
+from .supr import SUPR, SUPRHTTPError
 import settings
 
 
@@ -27,7 +17,8 @@ def adjust_allocation(project, resource_suprid, remove_allocations, add_allocati
             # Try to determine this from existing grants, else, give up.
             # HARDCODED ASSUMPTION: Last allocation decides queue names, AND we will never change history.
             # This assumes that only the very last allocation will *ever* differ.
-            last_alloc = sorted(project.allocation_set.all(), key=lambda x: x.end_date)[-1]
+            last_alloc = sorted(project.allocation_set.all(),
+                                key=lambda x: x.end_date)[-1]
             queue_name = last_alloc.queue.name
         else:
             queue_name = resource.name.lower()
@@ -35,41 +26,53 @@ def adjust_allocation(project, resource_suprid, remove_allocations, add_allocati
         queue = Queue.objects.get(resource=resource, name=queue_name)
     if dry_run:
         for allocation in add_allocations:
-            print('Would + {0} - {1} : {2} on queue {3} for {4}'.format(allocation['start_date'], allocation['end_date'], allocation['allocated'], queue_name, project.name))
+            print('Would + {0} - {1} : {2} on queue {3} for {4}'.format(
+                allocation['start_date'], allocation['end_date'],
+                allocation['allocated'], queue_name, project.name))
         for allocation in remove_allocations:
-            print('Would - {0} - {1} : {2} on queue {3} for {4}.'.format(allocation['start_date'], allocation['end_date'], allocation['allocated'], queue_name, project.name))
+            print('Would - {0} - {1} : {2} on queue {3} for {4}.'.format(
+                allocation['start_date'], allocation['end_date'],
+                allocation['allocated'], queue_name, project.name))
     else:
         Allocation.remove_allocations(project, queue, remove_allocations)
         Allocation.add_allocations(project, queue, add_allocations)
 
 
 def import_project_data(supr_proj, tengil_proj, dry_run=False):
-    supr_end_date = datetime.datetime.strptime(supr_proj.end_date, "%Y-%m-%d").date()
+    supr_end_date = datetime.datetime.strptime(
+        supr_proj.end_date, "%Y-%m-%d").date()
     if supr_end_date != tengil_proj.end_date:
-        print("{0}: End date {1} -> {2}".format(tengil_proj.name, tengil_proj.end_date, supr_end_date))
+        print("{0}: End date {1} -> {2}".format(tengil_proj.name,
+              tengil_proj.end_date, supr_end_date))
         if not dry_run:
             tengil_proj.end_date = supr_end_date
             tengil_proj.save()
 
-    supr_start_date = datetime.datetime.strptime(supr_proj.start_date, "%Y-%m-%d").date()
+    supr_start_date = datetime.datetime.strptime(
+        supr_proj.start_date, "%Y-%m-%d").date()
     if supr_start_date != tengil_proj.start_date:
-        print("{0}: Start date {1} -> {2}".format(tengil_proj.name, tengil_proj.start_date, supr_start_date))
+        print("{0}: Start date {1} -> {2}".format(tengil_proj.name,
+              tengil_proj.start_date, supr_start_date))
         if not dry_run:
             tengil_proj.start_date = supr_start_date
             tengil_proj.save()
     # faster than repeated DB calls inside the loop:
-    tengil_db_allocations = tengil_proj.allocation_set.all().prefetch_related('queue__resource')
+    tengil_db_allocations = tengil_proj.allocation_set.all(
+    ).prefetch_related('queue__resource')
 
     for supr_rp in supr_proj['resourceprojects']:
         # We get some non-c3se resources when projects have multiple allocations. We must skip these:
-        if supr_rp['resource']['centre']['name'] != 'C3SE': continue
+        if supr_rp['resource']['centre']['name'] != 'C3SE':
+            continue
 
         resource_suprid = supr_rp['resource']['id']
         # Allocations in SUPR
         supr_allocations = supr_rp['allocations']
         for a in supr_rp['allocations']:
-            a['start_date'] = datetime.datetime.strptime(a['start_date'], "%Y-%m-%d").date()
-            a['end_date'] = datetime.datetime.strptime(a['end_date'], "%Y-%m-%d").date()
+            a['start_date'] = datetime.datetime.strptime(
+                a['start_date'], "%Y-%m-%d").date()
+            a['end_date'] = datetime.datetime.strptime(
+                a['end_date'], "%Y-%m-%d").date()
             del a['id']
 
         # Allocations in Tengil
@@ -78,7 +81,8 @@ def import_project_data(supr_proj, tengil_proj, dry_run=False):
             # TODO: Old logic that i don't remember the reason for anymore. Perhaps this was just relevant for Hebbe-mstud and can be removed.
             # but, i'm unsure if it affects private partitions in general. TODO: think about this and perhaps remove the next 2 lines. / Micke
             suprid = allocation.queue.resource.suprid
-            if suprid != resource_suprid: continue
+            if suprid != resource_suprid:
+                continue
 
             a = {
                 'start_date': allocation.start_date,
@@ -91,9 +95,12 @@ def import_project_data(supr_proj, tengil_proj, dry_run=False):
 
         if tengil_allocations != supr_allocations:
             print("{0}: Allocation differs, fixing".format(tengil_proj.name))
-            remove_allocations = [k for k in tengil_allocations if k not in supr_allocations]
-            add_allocations = [k for k in supr_allocations if k not in tengil_allocations]
-            adjust_allocation(tengil_proj, resource_suprid, remove_allocations, add_allocations, dry_run)
+            remove_allocations = [
+                k for k in tengil_allocations if k not in supr_allocations]
+            add_allocations = [
+                k for k in supr_allocations if k not in tengil_allocations]
+            adjust_allocation(tengil_proj, resource_suprid,
+                              remove_allocations, add_allocations, dry_run)
 
 
 def import_project_members(supr_proj, tengil_proj, dry_run=False):
@@ -104,7 +111,8 @@ def import_project_members(supr_proj, tengil_proj, dry_run=False):
     users_to_add = supr_users_set - tengil_users_set
 
     if users_to_remove or users_to_add:
-        resources = tengil_proj.resources(max(tengil_proj.start_date, datetime.date.today()))
+        resources = tengil_proj.resources(
+            max(tengil_proj.start_date, datetime.date.today()))
         list_of_resources = [r.name for r in resources]
         has_compute = any([r.is_compute() for r in resources])
         has_storage = any([r.is_storage() for r in resources])
@@ -125,7 +133,8 @@ def import_project_members(supr_proj, tengil_proj, dry_run=False):
                                                      project=tengil_proj,
                                                      resources=', '.join(list_of_resources)))
 
-        print("- {0:14}: {1}".format(tengil_proj.name, tengil_person.fullName().encode('utf-8')))
+        print("- {0:14}: {1}".format(tengil_proj.name,
+              tengil_person.fullName().encode('utf-8')))
 
     # Adding members.
     for s_id in users_to_add:
@@ -140,7 +149,8 @@ def import_project_members(supr_proj, tengil_proj, dry_run=False):
             tengil_proj.save()
 
             compute_resources = {r for r in resources if r.is_compute()}
-            missing_account = len(compute_resources - {acc.resource for acc in tengil_person.account_set.all()}) > 0
+            missing_account = len(
+                compute_resources - {acc.resource for acc in tengil_person.account_set.all()}) > 0
 
             tengil_person.send_email("Added to project {0} at C3SE, Chalmers".format(tengil_proj.name),
                                      "view/email_user_added_to_project.txt",
@@ -151,11 +161,12 @@ def import_project_members(supr_proj, tengil_proj, dry_run=False):
                                                      missing_account=missing_account,
                                                      resources=', '.join(list_of_resources)))
 
-        print("+ {0:14}: {1}".format(tengil_proj.name, tengil_person.fullName().encode('utf-8')))
+        print("+ {0:14}: {1}".format(tengil_proj.name,
+              tengil_person.fullName().encode('utf-8')))
 
 
 def import_object_expiry_date(supr_object, tengil_object,
-                                    dry_run=False, verbose=False):
+                              dry_run=False, verbose=False):
     if 'expires' in supr_object:
         if str(tengil_object.expires) != str(supr_object.expires):
             if not dry_run:
@@ -195,7 +206,8 @@ def import_supr_projects(dry_run=False, verbose=False):
     # Search parameters
     params = {
         'resource_centre_id': 6,  # C3SE
-        'end_date_ge': datetime.date.today() - datetime.timedelta(days=30),  # Only active projects (plus a few extra days in case of last second changes)
+        # Only active projects (plus a few extra days in case of last second changes)
+        'end_date_ge': datetime.date.today() - datetime.timedelta(days=30),
     }
     try:
         supr_projects = supr.get('/project/search/', params=params)
@@ -205,7 +217,8 @@ def import_supr_projects(dry_run=False, verbose=False):
         print(e.text)
         raise
     if verbose:
-        print("Currently there are {0} active projects at C3SE present in SUPR".format(len(supr_projects.matches)))
+        print("Currently there are {0} active projects at C3SE present in SUPR".format(
+            len(supr_projects.matches)))
     active_project_requests = ProjectRequest.objects.all().values_list('suprid', flat=True)
     for supr_project in supr_projects.matches:
         try:
@@ -214,7 +227,8 @@ def import_supr_projects(dry_run=False, verbose=False):
             if supr_project.id not in active_project_requests:
                 print("Creating project request for " + supr_project.name)
                 if not dry_run:
-                    ProjectRequest.objects.create(suprid=supr_project.id, name=supr_project.name)
+                    ProjectRequest.objects.create(
+                        suprid=supr_project.id, name=supr_project.name)
             continue
         import_project_data(supr_project, tengil_proj, dry_run)
         import_project_members(supr_project, tengil_proj, dry_run)
@@ -240,24 +254,28 @@ def create_user_in_tengil(suprid, dob, pnr, dry_run=False):
                 try:
                     pdb_person = pdbpnr(pnr)
                 except ValueError:
-                    print('Hard error when trying to look up pnr: ' + pnr[:6] + '-XXXX')
+                    print('Hard error when trying to look up pnr: ' +
+                          pnr[:6] + '-XXXX')
             if not pdb_person:
                 try:
                     pdb_person = pdbemail(supr_user.email)
                 except ValueError:
-                    print('Hard error when trying to look up email: ' + supr_user.email)
+                    print('Hard error when trying to look up email: ' +
+                          supr_user.email)
             if pdb_person:
                 cid = pdb_person['CID']
                 # Attempt to pair up with existing (hopefully unpaired) User with same CID.
                 try:
-                    user = User.objects.get(CID=cid)  # Note: This should never happen anymore: all existing users must be in SUPR.
-                    raise ValueError(f"Request for user \"{cid}\" which already seem to exist in Tengil. This shouldn't happen.")
-                    #if user.SUPRID is not None or user.coupled_with_supr:
+                    # Note: This should never happen anymore: all existing users must be in SUPR.
+                    user = User.objects.get(CID=cid)
+                    raise ValueError(
+                        f"Request for user \"{cid}\" which already seem to exist in Tengil. This shouldn't happen.")
+                    # if user.SUPRID is not None or user.coupled_with_supr:
                     #    raise ValueError("Request for user which already seem to exist in Tengil. This shouldn't happen.")
-                    #user.SUPRID = suprid
-                    #user.coupled_with_supr = False  # sync done by update_centre_id_in_supr which creates Center ID posts in SUPR
-                    #user.save()
-                    #return user
+                    # user.SUPRID = suprid
+                    # user.coupled_with_supr = False  # sync done by update_centre_id_in_supr which creates Center ID posts in SUPR
+                    # user.save()
+                    # return user
                 except User.DoesNotExist:
                     pass
 
@@ -275,7 +293,8 @@ def create_user_in_tengil(suprid, dob, pnr, dry_run=False):
                     email=supr_user.email,
                     phone=supr_user.tel1,
                     attended_intro_seminar=False,
-                    coupled_with_supr=False,  # sync done by update_centre_id_in_supr which creates Center ID posts in SUPR
+                    # sync done by update_centre_id_in_supr which creates Center ID posts in SUPR
+                    coupled_with_supr=False,
                     ua_accepted_in_supr=supr_user.user_agreement_accepted),
                 pdb_person)
 
@@ -299,23 +318,28 @@ def create_ar_in_tengil(user, resource, dob, pnr, pdb_person, dry_run=False):
             if pnr is None:
                 pnr = ''
             if user.CID == '':
-                print(f"User {user.fullName()} has no CID: {user.CID}, creating account request!")
-                AccountRequest.objects.create(user=user, resource=resource, dob=dob, pnr=pnr)
+                print(
+                    f"User {user.fullName()} has no CID: {user.CID}, creating account request!")
+                AccountRequest.objects.create(
+                    user=user, resource=resource, dob=dob, pnr=pnr)
                 print("** INFO: An AccountRequest was created in Tengil for User {0} on resource {1}".format(
                     user.fullName().encode('utf8'), resource))
             else:
-                print(f"Auto-creating {resource} account for user {user.CID} if valid...")
+                print(
+                    f"Auto-creating {resource} account for user {user.CID} if valid...")
                 if int(pdb_person['unixid']) > 1000:
                     Account.objects.create(
-                            user=user,
-                            resource=resource,
-                            unixname=user.CID,
-                            unixid=int(pdb_person['unixid']))
+                        user=user,
+                        resource=resource,
+                        unixname=user.CID,
+                        unixid=int(pdb_person['unixid']))
                     Account.objects.get(user=user, resource=resource).log_create(
-                            DjangoUser.objects.get(username='tengil-bot'))
+                        DjangoUser.objects.get(username='tengil-bot'))
                 else:
-                    print(f"User {user.CID} has unixid < 1000, please create manually.")
-                    AccountRequest.objects.create(user=user, resource=resource, dob=dob, pnr=pnr)
+                    print(
+                        f"User {user.CID} has unixid < 1000, please create manually.")
+                    AccountRequest.objects.create(
+                        user=user, resource=resource, dob=dob, pnr=pnr)
 
 
 def get_supr_group_members(tengil_group):
@@ -323,7 +347,8 @@ def get_supr_group_members(tengil_group):
     supr = SUPR()
     suffix = '_r' if tengil_group.SUPR_regex else ''
     try:
-        supr_group = supr.get('/group/search/?name{0}={1}'.format(suffix, tengil_group.SUPR_match))
+        supr_group = supr.get(
+            '/group/search/?name{0}={1}'.format(suffix, tengil_group.SUPR_match))
     except SUPRHTTPError as e:
         # We want to show the text received if we get an HTTP Error
         print("HTTP error {0} from SUPR:".format(e.status_code))
@@ -331,7 +356,8 @@ def get_supr_group_members(tengil_group):
         raise
 
     if len(supr_group['matches']) < 1:
-        print('Error: group not found in SUPR: "{0}"!'.format(tengil_group.SUPR_match))
+        print('Error: group not found in SUPR: "{0}"!'.format(
+            tengil_group.SUPR_match))
         return None
 
     members = []
@@ -350,7 +376,8 @@ def import_group_members(dry_run=False, verbose=False):
 
         supr_members = get_supr_group_members(tengil_group)
         if supr_members is None:
-            print('Skipping futher processing of {0}'.format(tengil_group.name))
+            print('Skipping futher processing of {0}'.format(
+                tengil_group.name))
             continue
 
         # Build set of Tengil accounts for SUPR members
@@ -369,21 +396,26 @@ def import_group_members(dry_run=False, verbose=False):
             if to_add:
                 print('  Users missing in Tengil group:', members_to_str(to_add))
             if to_remove:
-                print('  Users to remove from Tengil group:', members_to_str(to_remove))
+                print('  Users to remove from Tengil group:',
+                      members_to_str(to_remove))
 
         for user in to_add:
             if not dry_run:
-                print('Adding user"' + str(user) + '" to UnixGroup "' + str(tengil_group) + '"')
+                print('Adding user"' + str(user) +
+                      '" to UnixGroup "' + str(tengil_group) + '"')
                 tengil_group.members.add(user)
             elif verbose:
-                print('Users "' + str(user) + '" should be added to UnixGroup "' + str(tengil_group) + '"')
+                print('Users "' + str(user) +
+                      '" should be added to UnixGroup "' + str(tengil_group) + '"')
 
         for user in to_remove:
             if not dry_run:
-                print('Removing user "' + str(user) + '" from UnixGroup "' + str(tengil_group) + '"')
+                print('Removing user "' + str(user) +
+                      '" from UnixGroup "' + str(tengil_group) + '"')
                 tengil_group.members.remove(user)
             elif verbose:
-                print('User "' + str(user) + '" should be removed from UnixGroup "' + str(tengil_group) + '"')
+                print('User "' + str(user) +
+                      '" should be removed from UnixGroup "' + str(tengil_group) + '"')
 
 
 def update_account_end_date(extra_days=31, dry_run=False, verbose=False):
@@ -394,7 +426,8 @@ def update_account_end_date(extra_days=31, dry_run=False, verbose=False):
 
     extra_days = datetime.timedelta(days=extra_days)
     # Grants includes X days backwards, since we let the accounts stay open to fetch files:
-    allocations = Allocation.objects.exclude(end_date__lt=datetime.date.today() - extra_days).prefetch_related('queue__resource', 'project__members')
+    allocations = Allocation.objects.exclude(end_date__lt=datetime.date.today(
+    ) - extra_days).prefetch_related('queue__resource', 'project__members')
 
     # Using grants is inefficient, we extract the max date for the (project, resource) pair:
     end_dates_tmp = dict()
@@ -450,7 +483,7 @@ def import_user_expiry_date(dry_run=False, verbose=False):
 
     # Search parameters
     params = {
-            'modified_since': (datetime.date.today() - datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")}
+        'modified_since': (datetime.date.today() - datetime.timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")}
 
     try:
         supr_persons = supr.get('/person/search/', params=params)
@@ -470,11 +503,11 @@ def import_user_expiry_date(dry_run=False, verbose=False):
             u = User.objects.get(id=p.centre_person_id)
         except User.DoesNotExist:
             if verbose:
-                print("** ERROR: User id=%s not found in Tengil (but id = centre_person_id in SUPR)" % p.centre_person_id)
+                print("** ERROR: User id=%s not found in Tengil (but id = centre_person_id in SUPR)" %
+                      p.centre_person_id)
             continue
 
         import_object_expiry_date(p, u, dry_run, verbose)
-
 
 
 def import_user_metadata(dry_run=False, verbose=False):
@@ -507,12 +540,14 @@ def import_user_metadata(dry_run=False, verbose=False):
             u = User.objects.get(id=p.centre_person_id)
         except User.DoesNotExist:
             if verbose:
-                print("** ERROR: User id=%s not found in Tengil (but id = centre_person_id in SUPR)" % p.centre_person_id)
+                print("** ERROR: User id=%s not found in Tengil (but id = centre_person_id in SUPR)" %
+                      p.centre_person_id)
             continue
 
         if not u.SUPRID:
             if verbose:
-                print("** ERROR: User %s (Tengil id=%s) not linked with SUPR" % (u.fullName(), u.id))
+                print("** ERROR: User %s (Tengil id=%s) not linked with SUPR" %
+                      (u.fullName(), u.id))
 
         if u.SUPRID != p.id:
             if u.SUPRID in p.merged_ids:
@@ -521,10 +556,12 @@ def import_user_metadata(dry_run=False, verbose=False):
                         u.fullName(), u.id, u.SUPRID, p.id))
                 u.SUPRID = p.id
                 if verbose:
-                    print("         User %s (Tengil id=%s) updated SUPRID to %s" % (u.fullName(), u.id, u.SUPRID))
+                    print("         User %s (Tengil id=%s) updated SUPRID to %s" % (
+                        u.fullName(), u.id, u.SUPRID))
             else:
                 if verbose:
-                    print("** ERROR: User %s (Tengil id=%s) points to SUPR Person id=%s" % (u.fullName(), u.id, u.SUPRID))
+                    print("** ERROR: User %s (Tengil id=%s) points to SUPR Person id=%s" %
+                          (u.fullName(), u.id, u.SUPRID))
 
         if u.firstName != p.first_name:
             if verbose:
@@ -540,19 +577,21 @@ def import_user_metadata(dry_run=False, verbose=False):
 
         if u.email != p.email:
             if verbose:
-                print("** INFO: User %s (Tengil id=%s) email (%s) changed to %s" % (u.fullName(), u.id, u.email, p.email))
+                print("** INFO: User %s (Tengil id=%s) email (%s) changed to %s" %
+                      (u.fullName(), u.id, u.email, p.email))
             u.email = p.email
 
         if u.phone != p.tel1:
             if verbose:
-                print("** INFO: User %s (Tengil id=%s) phone (%s) changed to %s" % (u.fullName(), u.id, u.phone, p.tel1))
+                print("** INFO: User %s (Tengil id=%s) phone (%s) changed to %s" %
+                      (u.fullName(), u.id, u.phone, p.tel1))
             u.phone = p.tel1
 
         # Has Person in SUPR accepted User Agreement?
         if not u.ua_accepted_in_supr:
             try:
                 x = p.user_agreement_accepted
-                #print("** INFO: User %s (Tengil id=%s) has accepted UA" % (u.fullName(), u.id))
+                # print("** INFO: User %s (Tengil id=%s) has accepted UA" % (u.fullName(), u.id))
                 u.ua_accepted_in_supr = x
             except KeyError:
                 pass
@@ -578,9 +617,11 @@ def update_account_in_supr(dry_run=False, verbose=False):
             return "disabled", "Account is disabled"
 
     # Get resources in Tengil with suprid set and not decommissioned
-    resources = Resource.objects.exclude(suprid=None).exclude(decommissioned=True).exclude(suprid=None)
+    resources = Resource.objects.exclude(suprid=None).exclude(
+        decommissioned=True).exclude(suprid=None)
 
-    unixnames_to_exclude = Q(unixname__startswith="c3-") | Q(unixname__startswith="swegrid")
+    unixnames_to_exclude = Q(
+        unixname__startswith="c3-") | Q(unixname__startswith="swegrid")
 
     supr = SUPR()
     for r in resources:
@@ -591,7 +632,8 @@ def update_account_in_supr(dry_run=False, verbose=False):
         try:
             supr_resource = supr.get('/resource/{0}/'.format(r.suprid))
         except SUPRHTTPError as e:
-            print("{0}: HTTP error %s from SUPR: {1}".format(r.name, e.status_code, e.text))
+            print("{0}: HTTP error %s from SUPR: {1}".format(
+                r.name, e.status_code, e.text))
 
         # Create diff between accounts present in Tengil and in SUPR
         supr_accounts_set = {a.username for a in supr_resource.accounts}
@@ -613,11 +655,13 @@ def update_account_in_supr(dry_run=False, verbose=False):
 
                     try:
                         if verbose:
-                            print("Created account {0}@{1}".format(account.unixname, r.name))
+                            print(
+                                "Created account {0}@{1}".format(account.unixname, r.name))
                         if not dry_run and settings.PRODUCTION:
                             supr.post('/account/create/', params)
                     except SUPRHTTPError as e:
-                        print("{0}: HTTP error {1} from SUPR: {2}".format(account.unixname, e.status_code, e.text))
+                        print("{0}: HTTP error {1} from SUPR: {2}".format(
+                            account.unixname, e.status_code, e.text))
 
         # Delete accounts in SUPR
         for username in delete_accounts_in_supr:
@@ -625,21 +669,26 @@ def update_account_in_supr(dry_run=False, verbose=False):
 
             try:
                 if verbose:
-                    print("Deleted account {0}@{1} in SUPR".format(username, r.name))
+                    print(
+                        "Deleted account {0}@{1} in SUPR".format(username, r.name))
                 if not dry_run and settings.PRODUCTION:
-                    supr.post('/resource/{0}/account/{1}/delete/'.format(r.suprid, username), params)
+                    supr.post(
+                        '/resource/{0}/account/{1}/delete/'.format(r.suprid, username), params)
             except SUPRHTTPError as e:
-                print("{0}: HTTP error {1} from SUPR: {2}".format(username, e.status_code, e.text))
+                print("{0}: HTTP error {1} from SUPR: {2}".format(
+                    username, e.status_code, e.text))
 
         # Get fresh resource/account information from SUPR.
         # Accounts may have been created or deleted.
         try:
             supr_resource = supr.get('/resource/{0}/'.format(r.suprid))
         except SUPRHTTPError as e:
-            print("{0}: HTTP error {1} from SUPR: {2}".format(r.name, e.status_code, e.text))
+            print("{0}: HTTP error {1} from SUPR: {2}".format(
+                r.name, e.status_code, e.text))
 
         # Update account information in SUPR if necessary.
-        supr_set = {(a.username, a.status, a.note) for a in supr_resource.accounts}
+        supr_set = {(a.username, a.status, a.note)
+                    for a in supr_resource.accounts}
         tengil_set = {(a, s, n) for a, s, n, _ in tengil_accounts}
         update_accounts_in_supr = tengil_set - supr_set
 
@@ -648,11 +697,14 @@ def update_account_in_supr(dry_run=False, verbose=False):
 
             try:
                 if verbose:
-                    print("Updated account {0}@{1} to status \"{2}\"".format(username, r.name, status))
+                    print(
+                        "Updated account {0}@{1} to status \"{2}\"".format(username, r.name, status))
                 if not dry_run and settings.PRODUCTION:
-                    supr.post('/resource/{0}/account/{1}/update/'.format(r.suprid, username), params)
+                    supr.post(
+                        '/resource/{0}/account/{1}/update/'.format(r.suprid, username), params)
             except SUPRHTTPError as e:
-                print("{0}: HTTP error {1} from SUPR: {2}".format(username, e.status_code, e.text))
+                print("{0}: HTTP error {1} from SUPR: {2}".format(
+                    username, e.status_code, e.text))
 
 
 def update_centre_id_in_supr(dry_run=False, verbose=False):
@@ -664,8 +716,8 @@ def update_centre_id_in_supr(dry_run=False, verbose=False):
     # in SUPR.
 
     not_coupled = (
-            User.objects
-            .filter(coupled_with_supr=False)
+        User.objects
+        .filter(coupled_with_supr=False)
             .exclude(SUPRID=None))
 
     for tengil_user in not_coupled:
@@ -711,12 +763,12 @@ def update_centre_id_in_supr(dry_run=False, verbose=False):
 
             if verbose:
                 print("Centre Person ID: from : %s : to : %s : for : %s ( %s ) : updated" % (
-                        old_centre_person_id, supr_person.centre_person_id, tengil_user.fullName(),
-                        tengil_user.SUPRID))
+                    old_centre_person_id, supr_person.centre_person_id, tengil_user.fullName(),
+                    tengil_user.SUPRID))
 
         if dry_run:
             print("* DRY-RUN: Centre Person ID: from : %s : to : %s : for : %s ( %s ) : should be updated" % (
-                   old_centre_person_id, tengil_user.pk, tengil_user.fullName(), tengil_user.SUPRID))
+                old_centre_person_id, tengil_user.pk, tengil_user.fullName(), tengil_user.SUPRID))
 
 
 def import_account_requests(dry_run=False, verbose=False):
@@ -745,14 +797,18 @@ def import_account_requests(dry_run=False, verbose=False):
                 try:
                     pdb_person = pdblookup(tengil_user.CID)
                 except ValueError:
-                    print('Hard error when trying to look up CID: ' + tengil_user.CID)
+                    print('Hard error when trying to look up CID: ' +
+                          tengil_user.CID)
                 if pdb_person is None:
                     try:
                         pdb_person = pdbemail(tengil_user.email)
                     except ValueError:
-                        print('Hard error when trying to look up email: ' + tengil_user.email)
+                        print(
+                            'Hard error when trying to look up email: ' + tengil_user.email)
             except User.DoesNotExist:
-                tengil_user, pdb_person = create_user_in_tengil(ar.person.id, dob, pnr, dry_run)
+                tengil_user, pdb_person = create_user_in_tengil(
+                    ar.person.id, dob, pnr, dry_run)
             if tengil_user is not None:
                 # Find if AR is already in Tengil
-                create_ar_in_tengil(tengil_user, resource, dob, pnr, pdb_person, dry_run)
+                create_ar_in_tengil(tengil_user, resource,
+                                    dob, pnr, pdb_person, dry_run)

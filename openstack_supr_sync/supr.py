@@ -44,17 +44,11 @@ class SUPR(object):
         self.user = settings.SUPR_API_USER
         self.password = settings.SUPR_API_PASSWORD
 
-        # Uncomment lines below and comment lines above
-        # to use blender instead och SUPR.
-        # self.base_url = settings.BLENDER_API_BASE_URL
-        # self.user = settings.BLENDER_API_USER
-        # self.password = settings.BLENDER_API_PASSWORD
-
     def get(self, url, params=None):
         url = self.base_url + url
 
         try:
-            r = requests.get(url, 
+            r = requests.get(url,
                              auth=(self.user, self.password),
                              params=params)
         except Exception as e:
@@ -76,7 +70,7 @@ class SUPR(object):
         except Exception:
             raise SUPRBadJSON
 
-        r = requests.post(url, 
+        r = requests.post(url,
                           auth=(self.user, self.password),
                           data=encoded_data)
 
