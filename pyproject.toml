@@ -4,4 +4,5 @@ version = "0.1.0"
 dependencies = ['requests',
                 'pyyaml',
                 'simplejson',
-                'python-openstackclient']
+                'python-openstackclient', # not sure which
+                'openstacksdk']           # one of these
