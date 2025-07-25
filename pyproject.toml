@@ -5,4 +5,5 @@ dependencies = ['requests',
                 'pyyaml',
                 'simplejson',
                 'python-openstackclient', # not sure which
-                'openstacksdk']           # one of these
+                'openstacksdk',           # one of these
+                'psycopg']                # need local database
