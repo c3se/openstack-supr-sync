@@ -1,6 +1,4 @@
 """ Draft of class for getting resources """
-import openstack
-import config
 from .connection_manager import ConnectionManager
 
 
@@ -11,6 +9,10 @@ class OpenstackObjects:
     @property
     def connection(self):
         return self._connection_manager.connection
+
+    @property
+    def member(self):
+        return self.connection.identity.find_role('member')
 
     def get_projects(self):
         return self.connection.identity.projects()
@@ -36,7 +38,16 @@ class OpenstackObjects:
     def update_user(self, id, **kwargs):
         return self.connection.identity.update_user(id, **kwargs)
 
+
+    # Maybe this should take SUPRID and username and then automagically do the database wrangling.
+    # At what stage do we generate a username? How?
     def create_user(self, name, **kwargs):
+        """
+        kwargs
+            Description
+
+            enabled
+        """
         return self.connection.identity.create_user(name, **kwargs)
 
     def find_project(self, name=None, project_id=None, filters=None, domain_id=None):
@@ -51,6 +62,7 @@ class OpenstackObjects:
     def update_project(self, id, **kwargs):
         return self.connection.identity.update_project(id, **kwargs)
 
+    # As with users, do we automate the database reconciliation at this step?
     def create_project(self, name, **kwargs):
         """
         kwargs
@@ -60,8 +72,15 @@ class OpenstackObjects:
 
             is_domain
         """
-        return self.connection.identity.create_project(name, **kwargs)
+        kwargs['name'] = name
+        return self.connection.identity.create_project(**kwargs)
 
-    def assign_project_role_to_user(self, project, user, role, inherited=False):
+    # Do we make this work with SUPRID:s, or do we make another class with this abstraction layer?
+    def add_user_to_project(self, project, user):
+        """
+        Add a user to a project as a `member`.
+
+        Note that "project" and "user" must both be OpenStack Ids
+        """
         return self.connection.identity.assign_project_role_to_user(
-            project, user, role, inherited=inherited)
+            project, user, self.member)
