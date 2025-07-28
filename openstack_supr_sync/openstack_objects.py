@@ -71,7 +71,6 @@ class OpenstackObjects:
         kwargs['name'] = name
         return self.connection.identity.create_project(**kwargs)
 
-    # Do we make this work with SUPRID:s, or do we make another class with this abstraction layer?
     def add_user_to_project(self, project_id, user_id):
         """
         Add a user to a project as a `member`.
