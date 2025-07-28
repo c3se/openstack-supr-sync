@@ -26,21 +26,18 @@ class OpenstackObjects:
     def get_services(self):
         return self.connection.identity.services()
 
-    def get_user(self, user_id=None):
+    def get_user(self, user_id):
         return self.connection.identity.get_user_by_id(user_id)
 
     def find_user(self, name=None, user_id=None, filters=None, domain_id=None):
-        if id is not None:
+        if user_id is not None:
             self.get_user(user_id)
         else:
             return self.connection.identity.get_user(name, filters, domain_id)
 
-    def update_user(self, id, **kwargs):
-        return self.connection.identity.update_user(id, **kwargs)
+    def update_user(self, project_id, **kwargs):
+        return self.connection.identity.update_user(project_id, **kwargs)
 
-
-    # Maybe this should take SUPRID and username and then automagically do the database wrangling.
-    # At what stage do we generate a username? How?
     def create_user(self, name, **kwargs):
         """
         kwargs
@@ -59,10 +56,9 @@ class OpenstackObjects:
     def get_project(self, project_id):
         return self.connection.identity.get_project_by_id(project_id)
 
-    def update_project(self, id, **kwargs):
-        return self.connection.identity.update_project(id, **kwargs)
+    def update_project(self, project_id, **kwargs):
+        return self.connection.identity.update_project(project_id, **kwargs)
 
-    # As with users, do we automate the database reconciliation at this step?
     def create_project(self, name, **kwargs):
         """
         kwargs
@@ -76,11 +72,9 @@ class OpenstackObjects:
         return self.connection.identity.create_project(**kwargs)
 
     # Do we make this work with SUPRID:s, or do we make another class with this abstraction layer?
-    def add_user_to_project(self, project, user):
+    def add_user_to_project(self, project_id, user_id):
         """
         Add a user to a project as a `member`.
-
-        Note that "project" and "user" must both be OpenStack Ids
         """
         return self.connection.identity.assign_project_role_to_user(
-            project, user, self.member)
+            project_id, user_id, self.member)
