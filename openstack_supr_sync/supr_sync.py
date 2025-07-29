@@ -1,4 +1,5 @@
 import datetime
+import itertools
 from .supr import SUPR, SUPRHTTPError
 from config import config
 from connection_manager import ConnectionManager
@@ -297,46 +298,37 @@ def create_user_in_tengil(suprid, dob, pnr, dry_run=False):
 
 
 def create_ar_in_tengil(user, resource, dob, pnr, pdb_person, dry_run=False):
-    # Create new AR (no-op if AR already exists)
-
-    # Make sure we don't create duplicates right after an account is created (in case SUPR isn't updated yet).
-    if Account.objects.filter(user=user, resource=resource).exists():
-        return
-
-    try:
-        AccountRequest.objects.get(user=user, resource=resource)
-    except AccountRequest.DoesNotExist:
-        if dry_run:
-            print("** INFO: An AccountRequest would have been created in Tengil for User {0} on resource {1}".format(
+    if dry_run:
+        print("** INFO: An AccountRequest would have been created in Tengil for User {0} on resource {1}".format(
+            user.fullName().encode('utf8'), resource))
+    else:
+        if dob is None:
+            dob = ''
+        if pnr is None:
+            pnr = ''
+        if user.CID == '':
+            print(
+                f"User {user.fullName()} has no CID: {user.CID}, creating account request!")
+            AccountRequest.objects.create(
+                user=user, resource=resource, dob=dob, pnr=pnr)
+            print("** INFO: An AccountRequest was created in Tengil for User {0} on resource {1}".format(
                 user.fullName().encode('utf8'), resource))
         else:
-            if dob is None:
-                dob = ''
-            if pnr is None:
-                pnr = ''
-            if user.CID == '':
-                print(
-                    f"User {user.fullName()} has no CID: {user.CID}, creating account request!")
-                AccountRequest.objects.create(
-                    user=user, resource=resource, dob=dob, pnr=pnr)
-                print("** INFO: An AccountRequest was created in Tengil for User {0} on resource {1}".format(
-                    user.fullName().encode('utf8'), resource))
+            print(
+                f"Auto-creating {resource} account for user {user.CID} if valid...")
+            if int(pdb_person['unixid']) > 1000:
+                Account.objects.create(
+                    user=user,
+                    resource=resource,
+                    unixname=user.CID,
+                    unixid=int(pdb_person['unixid']))
+                Account.objects.get(user=user, resource=resource).log_create(
+                    DjangoUser.objects.get(username='tengil-bot'))
             else:
                 print(
-                    f"Auto-creating {resource} account for user {user.CID} if valid...")
-                if int(pdb_person['unixid']) > 1000:
-                    Account.objects.create(
-                        user=user,
-                        resource=resource,
-                        unixname=user.CID,
-                        unixid=int(pdb_person['unixid']))
-                    Account.objects.get(user=user, resource=resource).log_create(
-                        DjangoUser.objects.get(username='tengil-bot'))
-                else:
-                    print(
-                        f"User {user.CID} has unixid < 1000, please create manually.")
-                    AccountRequest.objects.create(
-                        user=user, resource=resource, dob=dob, pnr=pnr)
+                    f"User {user.CID} has unixid < 1000, please create manually.")
+                AccountRequest.objects.create(
+                    user=user, resource=resource, dob=dob, pnr=pnr)
 
 
 def get_supr_group_members(tengil_group):
@@ -588,7 +580,6 @@ def import_user_metadata(dry_run=False, verbose=False):
         if not u.ua_accepted_in_supr:
             try:
                 x = p.user_agreement_accepted
-                # print("** INFO: User %s (Tengil id=%s) has accepted UA" % (u.fullName(), u.id))
                 u.ua_accepted_in_supr = x
             except KeyError:
                 pass
@@ -612,200 +603,64 @@ def update_account_in_supr(dry_run=False, verbose=False):
                 return "disabled", "Account is closed"
         else:
             return "disabled", "Account is disabled"
-
-    # Get resources in Tengil with suprid set and not decommissioned
-    resources = Resource.objects.exclude(suprid=None).exclude(
-        decommissioned=True).exclude(suprid=None)
-
-    unixnames_to_exclude = Q(
-        unixname__startswith="c3-") | Q(unixname__startswith="swegrid")
-
     supr = SUPR()
-    for r in resources:
-        # ["username", "status", "note", Account_object]
-        tengil_accounts = [(a.unixname,) + account_open_or_closed(a) + (a,)
-                           for a in r.account_set.exclude(user__SUPRID=None).exclude(unixnames_to_exclude)]
-        # Get Resource including account information from SUPR
+    openstack_accounts = openstack_objects.get_users()
+    # Get Resource including account information from SUPR
+    supr_resource = supr.get('/resource/{0}/'.format(config['resource_id']))
+    supr_set = {(a.username, a.status) for a in supr_resource.accounts}
+    tengil_set = {(o.id, o.status) for o in tengil_accounts}
+    update_accounts_in_supr = tengil_set - supr_set
+    for openstack_id, status in update_accounts_in_supr:
+        params = {"status": status}
         try:
-            supr_resource = supr.get('/resource/{0}/'.format(r.suprid))
-        except SUPRHTTPError as e:
-            print("{0}: HTTP error %s from SUPR: {1}".format(
-                r.name, e.status_code, e.text))
-
-        # Create diff between accounts present in Tengil and in SUPR
-        supr_accounts_set = {a.username for a in supr_resource.accounts}
-        tengil_accounts_set = {a for a, _, _, _ in tengil_accounts}
-        create_accounts_in_supr = tengil_accounts_set - supr_accounts_set
-        delete_accounts_in_supr = supr_accounts_set - tengil_accounts_set
-
-        # Create accounts not present in SUPR
-        if create_accounts_in_supr:
-            for username, status, note, account in tengil_accounts:
-                if username in create_accounts_in_supr:
-                    params = {
-                        "username": account.unixname,
-                        "person_id": account.user.SUPRID,
-                        "resource_id": r.suprid,
-                        "status": status,
-                        "note": note,
-                    }
-
-                    try:
-                        if verbose:
-                            print(
-                                "Created account {0}@{1}".format(account.unixname, r.name))
-                        if not dry_run and settings.PRODUCTION:
-                            supr.post('/account/create/', params)
-                    except SUPRHTTPError as e:
-                        print("{0}: HTTP error {1} from SUPR: {2}".format(
-                            account.unixname, e.status_code, e.text))
-
-        # Delete accounts in SUPR
-        for username in delete_accounts_in_supr:
-            params = {}
-
-            try:
-                if verbose:
-                    print(
-                        "Deleted account {0}@{1} in SUPR".format(username, r.name))
-                if not dry_run and settings.PRODUCTION:
-                    supr.post(
-                        '/resource/{0}/account/{1}/delete/'.format(r.suprid, username), params)
-            except SUPRHTTPError as e:
-                print("{0}: HTTP error {1} from SUPR: {2}".format(
-                    username, e.status_code, e.text))
-
-        # Get fresh resource/account information from SUPR.
-        # Accounts may have been created or deleted.
-        try:
-            supr_resource = supr.get('/resource/{0}/'.format(r.suprid))
+            if verbose:
+                print(
+                    "Updated account {0}@{1} to status \"{2}\"".format(username, r.name, status))
+            if not dry_run and settings.PRODUCTION:
+                supr.post(
+                    '/resource/{0}/account/{1}/update/'.format(r.suprid, username), params)
         except SUPRHTTPError as e:
             print("{0}: HTTP error {1} from SUPR: {2}".format(
-                r.name, e.status_code, e.text))
-
-        # Update account information in SUPR if necessary.
-        supr_set = {(a.username, a.status, a.note)
-                    for a in supr_resource.accounts}
-        tengil_set = {(a, s, n) for a, s, n, _ in tengil_accounts}
-        update_accounts_in_supr = tengil_set - supr_set
-
-        for username, status, note in update_accounts_in_supr:
-            params = {"status": status, "note": note}
-
-            try:
-                if verbose:
-                    print(
-                        "Updated account {0}@{1} to status \"{2}\"".format(username, r.name, status))
-                if not dry_run and settings.PRODUCTION:
-                    supr.post(
-                        '/resource/{0}/account/{1}/update/'.format(r.suprid, username), params)
-            except SUPRHTTPError as e:
-                print("{0}: HTTP error {1} from SUPR: {2}".format(
-                    username, e.status_code, e.text))
+                username, e.status_code, e.text))
 
 
-def update_centre_id_in_supr(dry_run=False, verbose=False):
-    # User in Tengil must have SUPR ID set.
-
+def import_users_from_account_requests(dry_run=False, verbose=False):
     supr = SUPR()
-
-    # Get all Users with SUPRID set but not coupled with corresponding Person
-    # in SUPR.
-
-    not_coupled = (
-        User.objects
-        .filter(coupled_with_supr=False)
-            .exclude(SUPRID=None))
-
-    for tengil_user in not_coupled:
-        # Just to make sure.
-        if not tengil_user.SUPRID:
+    supr_resource = supr.get('/resource/%d/' % config['resource_suprid'])
+    openstack_users = openstack_objects.get_users()
+    openstack_user_names = [o.name for o in openstack_users]
+    for ar in supr_resource.accountrequests:
+        if ar.status != 'Active':
             continue
-
-        # Get Person from SUPR
+        for username in ar.requested_usernames:
+            if username not in openstack_user_names:
+                break
+        else:
+            if len(ar.requested_usernames) > 0:
+                base_username = ar.requested_usernames[0]
+            else:
+                base_username = ar.person.first_name[:8]
+                if base_username not in openstack_user_names:
+                    username = base_username
+                    break
+            for i in itertools.count(0, 1):
+                username = base_username + str(i)
+                if username not in openstack_user_names:
+                    break
         try:
-            supr_person = supr.get('/person/%d/' % tengil_user.SUPRID)
-        except SUPRHTTPError as e:
-            # We want to show the text received if we get an HTTP Error
-            print("HTTP error %s from SUPR:" % e.status_code)
-            print(e.text)
-            raise
-
-        if supr_person.centre_person_id:
-            if int(supr_person.centre_person_id) == int(tengil_user.pk):
-                print('NOTE: coupled_with_supr is False, and '
-                      'SUPR has a centre_id. This seems wrong, '
-                      'setting coupled_with_supr to True (if not dry_run)')
-                if not dry_run:
-                    tengil_user.coupled_with_supr = True
-                    tengil_user.save()
-                continue
-
-        old_centre_person_id = supr_person.centre_person_id
-
-        if not dry_run and settings.PRODUCTION:
-
-            try:
-                supr_person = supr.post('/person/%d/update/' % tengil_user.SUPRID,
-                                        dict(centre_person_id=str(tengil_user.pk)))
-            except SUPRHTTPError as e:
-                # We want to show the text received if we get an HTTP Error
-                print("HTTP error %s from SUPR:" % e.status_code)
-                print(e.text)
-                raise
-
-            # User is coupled with person in SUPR.
-            tengil_user.coupled_with_supr = True
-            tengil_user.save()
-
             if verbose:
-                print("Centre Person ID: from : %s : to : %s : for : %s ( %s ) : updated" % (
-                    old_centre_person_id, supr_person.centre_person_id, tengil_user.fullName(),
-                    tengil_user.SUPRID))
-
-        if dry_run:
-            print("* DRY-RUN: Centre Person ID: from : %s : to : %s : for : %s ( %s ) : should be updated" % (
-                old_centre_person_id, tengil_user.pk, tengil_user.fullName(), tengil_user.SUPRID))
-
-
-def import_account_requests(dry_run=False, verbose=False):
-    supr = SUPR()
-    for resource in Resource.objects.filter(decommissioned=False).exclude(suprid=None):
-        if verbose:
-            print("Fetching ARs from ", resource)
-        supr_resource = supr.get('/resource/%d/' % resource.suprid)
-        for ar in supr_resource.accountrequests:
-            if ar.status != 'Active':
-                continue
-
-            try:
-                pnr = ar.personal_identity_number
-            except KeyError:
-                pnr = None
-            try:
-                dob = ar.date_of_birth
-            except KeyError:
-                dob = pnr_to_dob(pnr)
-
-            # First, find if user exists (else we can't proceed).
-            # If not, directly create user or a user request first:
-            try:
-                tengil_user = User.objects.get(SUPRID=ar.person.id)
-                try:
-                    pdb_person = pdblookup(tengil_user.CID)
-                except ValueError:
-                    print('Hard error when trying to look up CID: ' +
-                          tengil_user.CID)
-                if pdb_person is None:
-                    try:
-                        pdb_person = pdbemail(tengil_user.email)
-                    except ValueError:
-                        print(
-                            'Hard error when trying to look up email: ' + tengil_user.email)
-            except User.DoesNotExist:
-                tengil_user, pdb_person = create_user_in_tengil(
-                    ar.person.id, dob, pnr, dry_run)
-            if tengil_user is not None:
-                # Find if AR is already in Tengil
-                create_ar_in_tengil(tengil_user, resource,
-                                    dob, pnr, pdb_person, dry_run)
+                print(
+                    "Created account {0}".format(username))
+            if not dry_run:
+                openstack_user = openstack_objects.create_user(username,
+                                                               status='disabled')
+                params = {
+                    "username": openstack_user.id,
+                    "person_id": ar.person.id,
+                    "resource_id": config['resource_suprid'],
+                    "status": 'disabled',
+                    "note": f'username: {username}'}
+                supr.post('/account/create/', params)
+        except SUPRHTTPError:
+            openstack_objects.delete_user(openstack_user.id)
+            print("Cannot connect to SUPR, deleting user!")
