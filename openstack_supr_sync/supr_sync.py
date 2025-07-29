@@ -608,20 +608,20 @@ def update_account_in_supr(dry_run=False, verbose=False):
     # Get Resource including account information from SUPR
     supr_resource = supr.get('/resource/{0}/'.format(config['resource_id']))
     supr_set = {(a.username, a.status) for a in supr_resource.accounts}
-    tengil_set = {(o.id, o.status) for o in tengil_accounts}
+    tengil_set = {(o.id, o.status) for o in openstack_accounts}
     update_accounts_in_supr = tengil_set - supr_set
     for openstack_id, status in update_accounts_in_supr:
         params = {"status": status}
         try:
             if verbose:
                 print(
-                    "Updated account {0}@{1} to status \"{2}\"".format(username, r.name, status))
-            if not dry_run and settings.PRODUCTION:
+                    "Updated account {0} to status \"{1}\"".format(openstack_id, status))
+            if not dry_run:
                 supr.post(
-                    '/resource/{0}/account/{1}/update/'.format(r.suprid, username), params)
+                    '/resource/{0}/account/{1}/update/'.format(config['resource_id'], openstack_id), params)
         except SUPRHTTPError as e:
             print("{0}: HTTP error {1} from SUPR: {2}".format(
-                username, e.status_code, e.text))
+                openstack_id, e.status_code, e.text))
 
 
 def import_users_from_account_requests(dry_run=False, verbose=False):
