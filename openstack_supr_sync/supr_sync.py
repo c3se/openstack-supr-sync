@@ -1,6 +1,11 @@
 import datetime
 from .supr import SUPR, SUPRHTTPError
-import settings
+from config import config
+from connection_manager import ConnectionManager
+from openstack_objects import OpenstackObjects
+
+connection = ConnectionManager(config['cloud_name'])
+openstack_objects = OpenstackObjects(connection)
 
 
 def adjust_allocation(project, resource_suprid, remove_allocations, add_allocations, dry_run):
@@ -75,15 +80,8 @@ def import_project_data(supr_proj, tengil_proj, dry_run=False):
                 a['end_date'], "%Y-%m-%d").date()
             del a['id']
 
-        # Allocations in Tengil
         tengil_allocations = list()
         for allocation in tengil_db_allocations:
-            # TODO: Old logic that i don't remember the reason for anymore. Perhaps this was just relevant for Hebbe-mstud and can be removed.
-            # but, i'm unsure if it affects private partitions in general. TODO: think about this and perhaps remove the next 2 lines. / Micke
-            suprid = allocation.queue.resource.suprid
-            if suprid != resource_suprid:
-                continue
-
             a = {
                 'start_date': allocation.start_date,
                 'end_date': allocation.end_date,
@@ -219,20 +217,19 @@ def import_supr_projects(dry_run=False, verbose=False):
     if verbose:
         print("Currently there are {0} active projects at C3SE present in SUPR".format(
             len(supr_projects.matches)))
-    active_project_requests = ProjectRequest.objects.all().values_list('suprid', flat=True)
+    # active_project_requests = ProjectRequest.objects.all().values_list('suprid', flat=True)
+    openstack_projects = openstack_objects.get_projects()
+    openstack_project_ids = [o.id for o in openstack_projects]
     for supr_project in supr_projects.matches:
-        try:
-            tengil_proj = Project.objects.get(suprid=supr_project.id)
-        except Project.DoesNotExist:
-            if supr_project.id not in active_project_requests:
-                print("Creating project request for " + supr_project.name)
-                if not dry_run:
-                    ProjectRequest.objects.create(
-                        suprid=supr_project.id, name=supr_project.name)
-            continue
-        import_project_data(supr_project, tengil_proj, dry_run)
-        import_project_members(supr_project, tengil_proj, dry_run)
-        ldap_update_tengil_project(ldap_connect(), tengil_proj, dry_run)
+        if supr_project.directory_name in openstack_project_ids:
+            openstack_project = openstack_projects[openstack_project_ids.index(supr_project.directory_name)]
+        else:
+            # use directory name in SUPR to match?
+            openstack_project = openstack_objects.create_project(supr_project.name)
+        import_project_data(supr_project, openstack_project, dry_run)
+        import_project_members(supr_project, openstack_project, dry_run)
+        # hopefully we will never need this...
+        # ldap_update_tengil_project(ldap_connect(), tengil_proj, dry_run)
 
 
 def create_user_in_tengil(suprid, dob, pnr, dry_run=False):

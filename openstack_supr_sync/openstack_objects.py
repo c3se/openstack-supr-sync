@@ -45,7 +45,8 @@ class OpenstackObjects:
 
             enabled
         """
-        return self.connection.identity.create_user(name, **kwargs)
+        kwargs['name'] = name
+        return self.connection.identity.create_user(**kwargs)
 
     def find_project(self, name=None, project_id=None, filters=None, domain_id=None):
         if id is not None:
