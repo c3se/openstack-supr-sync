@@ -1,33 +1,41 @@
 import psycopg
-import .config
+from .config import config
 from contextlib import contextmanager
 
 database_name = config['database']['database_name']
 
-# We need at least a minimal map of SUPRID -> openstackid
 
-CREATE_USER_TABLE = """
-                    CREATE TABLE IF NOT EXISTS users
-                    (suprid integer PRIMARY KEY,
-                    openstackid integer UNIQUE NOT NULL,
-                    username TEXT)
-                    """
-CREATE_PROJECT_TABLE = """
-                       CREATE TABLE IF NOT EXISTS projects
-                       (suprid integer PRIMARY KEY,
-                       openstackid integer UNIQUE NOT NULL,
-                       projectname text)
-                       """
+CREATE_USAGE_TABLE = """
+    CREATE TABLE IF NOT EXISTS coin_usage
+    (project_id text PRIAMRY KEY,
+    usage DOUBLE PRECISION,
+    last_measurement DOUBLE_PRECISION,
+    measurement_range TSTZRANGE)
+    """
 
-CREATE_USER = """
-              INSERT INTO users
-              (suprid, openstackid, username)
+CREATE_USAGE_RECORD_TABLE = """
+    CREATE TABLE IF NOT EXISTS coin_usage_record
+    (project_id text PRIAMRY KEY,
+    usage DOUBLE PRECISION,
+    measurement_range TSTZRANGE)
+    """
+
+CREATE_USAGE_ENTRY = """
+              INSERT INTO coin_usage
+              (project_id, usage, last_measurement,
+              measurement_range)
+              VALUES (%s, %s, %s, %s)
+              """
+
+CREATE_USAGE_RECORD = """
+              INSERT INTO coin_usage_record
+              (project_id, usage,
+              measurement_range)
               VALUES (%s, %s, %s)
               """
-CREATE_PROJECT = "INSERT INTO projects (suprid, openstackid, projectname) VALUES (%s, %s, %s)"
 
-GET_USER_BY_SUPRID = "SELECT * FROM users WHERE suprid = %s"
-GET_USER_BY_OPENSTACKID = "SELECT * FROM users WHERE openstackid = %s"
+GET_ENTRY_BY_PROJECT_ID = "SELECT * FROM coin_usage_record WHERE project_id = %s"
+GET_USAGE_RECORD_SINCE_TIME = "SELECT * FROM coing_usage_record WHERE project_id = %s"
 
 
 @contextmanager
