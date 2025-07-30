@@ -78,3 +78,10 @@ class OpenstackObjects:
         """
         return self.connection.identity.assign_project_role_to_user(
             project_id, user_id, self.member)
+
+    def remove_user_from_project(self, project_id, user_id):
+        """
+        Add a user to a project as a `member`.
+        """
+        return self.connection.identity.unassign_project_role_from_user(
+            project_id, user_id, self.member)
