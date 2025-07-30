@@ -9,99 +9,6 @@ connection = ConnectionManager(config['cloud_name'])
 openstack_objects = OpenstackObjects(connection)
 
 
-def adjust_allocation(project, resource_suprid, remove_allocations, add_allocations, dry_run):
-    """
-    Adjusts the allocation from now until the end of the project.
-    """
-    resource = Resource.objects.get(suprid=resource_suprid)
-
-    try:
-        queue = Queue.objects.get(resource=resource)
-    except Queue.MultipleObjectsReturned:
-        # Must first find special queues.
-        if has_private_queue(project.name):
-            # Try to determine this from existing grants, else, give up.
-            # HARDCODED ASSUMPTION: Last allocation decides queue names, AND we will never change history.
-            # This assumes that only the very last allocation will *ever* differ.
-            last_alloc = sorted(project.allocation_set.all(),
-                                key=lambda x: x.end_date)[-1]
-            queue_name = last_alloc.queue.name
-        else:
-            queue_name = resource.name.lower()
-
-        queue = Queue.objects.get(resource=resource, name=queue_name)
-    if dry_run:
-        for allocation in add_allocations:
-            print('Would + {0} - {1} : {2} on queue {3} for {4}'.format(
-                allocation['start_date'], allocation['end_date'],
-                allocation['allocated'], queue_name, project.name))
-        for allocation in remove_allocations:
-            print('Would - {0} - {1} : {2} on queue {3} for {4}.'.format(
-                allocation['start_date'], allocation['end_date'],
-                allocation['allocated'], queue_name, project.name))
-    else:
-        Allocation.remove_allocations(project, queue, remove_allocations)
-        Allocation.add_allocations(project, queue, add_allocations)
-
-
-def import_project_data(supr_proj, tengil_proj, dry_run=False):
-    supr_end_date = datetime.datetime.strptime(
-        supr_proj.end_date, "%Y-%m-%d").date()
-    if supr_end_date != tengil_proj.end_date:
-        print("{0}: End date {1} -> {2}".format(tengil_proj.name,
-              tengil_proj.end_date, supr_end_date))
-        if not dry_run:
-            tengil_proj.end_date = supr_end_date
-            tengil_proj.save()
-
-    supr_start_date = datetime.datetime.strptime(
-        supr_proj.start_date, "%Y-%m-%d").date()
-    if supr_start_date != tengil_proj.start_date:
-        print("{0}: Start date {1} -> {2}".format(tengil_proj.name,
-              tengil_proj.start_date, supr_start_date))
-        if not dry_run:
-            tengil_proj.start_date = supr_start_date
-            tengil_proj.save()
-    # faster than repeated DB calls inside the loop:
-    tengil_db_allocations = tengil_proj.allocation_set.all(
-    ).prefetch_related('queue__resource')
-
-    for supr_rp in supr_proj['resourceprojects']:
-        # We get some non-c3se resources when projects have multiple allocations. We must skip these:
-        if supr_rp['resource']['centre']['name'] != 'C3SE':
-            continue
-
-        resource_suprid = supr_rp['resource']['id']
-        # Allocations in SUPR
-        supr_allocations = supr_rp['allocations']
-        for a in supr_rp['allocations']:
-            a['start_date'] = datetime.datetime.strptime(
-                a['start_date'], "%Y-%m-%d").date()
-            a['end_date'] = datetime.datetime.strptime(
-                a['end_date'], "%Y-%m-%d").date()
-            del a['id']
-
-        tengil_allocations = list()
-        for allocation in tengil_db_allocations:
-            a = {
-                'start_date': allocation.start_date,
-                'end_date': allocation.end_date,
-                'allocated': allocation.allocation,
-            }
-            if allocation.allocation2 is not None:
-                a['allocated_2'] = allocation.allocation2
-            tengil_allocations.append(a)
-
-        if tengil_allocations != supr_allocations:
-            print("{0}: Allocation differs, fixing".format(tengil_proj.name))
-            remove_allocations = [
-                k for k in tengil_allocations if k not in supr_allocations]
-            add_allocations = [
-                k for k in supr_allocations if k not in tengil_allocations]
-            adjust_allocation(tengil_proj, resource_suprid,
-                              remove_allocations, add_allocations, dry_run)
-
-
 def import_project_members(supr_proj, openstack_project, dry_run=False):
     supr_users = supr_proj.members
     supr_accounts = []
@@ -147,7 +54,9 @@ def import_project_members(supr_proj, openstack_project, dry_run=False):
 def disable_expired_projects(dry_run=False, verbose=False):
     supr = SUPR()
     # Search parameters
-    params = {'resource_id': config['resource_id']}  # C3SE_CLOUD
+    params = {'resource_id': config['resource_id'],
+              'end_date_le': datetime.date.today()}
+
     try:
         supr_projects = supr.get('/project/search/', params=params)
     except SUPRHTTPError as e:
@@ -157,6 +66,15 @@ def disable_expired_projects(dry_run=False, verbose=False):
     for supr_project in supr_projects.matches:
         if datetime.date.fromisoformat(supr_project.expires) < datetime.date.today():
             openstack_objects.update_project(openstack_projects[supr_project.name], state='disabled')
+
+
+def limit_projects_without_resources(dry_run=False, verbose=False):
+    supr = SUPR()
+    # Search parameters
+    params = {
+        'resource_id': config['resource_id'],  # C3SE
+        'end_date_ge': datetime.date.today() - datetime.timedelta(days=30)}
+    # TODO: some kind of logic to limit projects that run out of currency here
 
 
 def import_supr_projects(dry_run=False, verbose=False):
@@ -183,7 +101,7 @@ def import_supr_projects(dry_run=False, verbose=False):
             openstack_project = openstack_projects[supr_project.name]
         else:
             openstack_project = openstack_objects.create_project(supr_project.name)
-        import_project_data(supr_project, openstack_project, dry_run)
+        # import_project_data(supr_project, openstack_project, dry_run)
         import_project_members(supr_project, openstack_project, dry_run)
         # hopefully we will never need this...
         # ldap_update_tengil_project(ldap_connect(), tengil_proj, dry_run)

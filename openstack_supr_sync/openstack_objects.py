@@ -20,11 +20,51 @@ class OpenstackObjects:
     def get_users(self):
         return self.connection.identity.users()
 
+    def get_servers(self):
+        return self.connection.compute.servers(all_projects=True)
+
     def get_domains(self):
         return self.connection.identity.domains()
 
     def get_services(self):
         return self.connection.identity.services()
+
+    def set_project_storage_quota(self,
+                                  project_id,
+                                  storage_in_gb=None,
+                                  number_of_volumes=None,
+                                  number_of_snapshots=None):
+        """
+        Sets the 'gigabytes' storage quota which modifies the total size
+        of volumes and volume snapshots, as well as the number of volumes nad snaphsots.
+
+        If any one value is not set, it is left unchanged.
+        """
+        kwargs = {}
+        if storage_in_gb is not None:
+            kwargs['gigabytes'] = storage_in_gb
+        if number_of_volumes is not None:
+            kwargs['volumes'] = number_of_volumes
+        if number_of_snapshots is not None:
+            kwargs['snapshots'] = number_of_snapshots
+        return self.connection.block_storage.update_quota_set(
+            project_id, **kwargs)
+
+    def set_project_vm_quota(self,
+                             project_id,
+                             cores=None,
+                             ram=None):
+        """
+        Set the number of vCPUs (cores) and RAM a project can use. If `cores` and `ram`
+        are not set when called, they are unmodified.
+        """
+        kwargs = {}
+        if cores is not None:
+            kwargs['cores'] = cores
+        if ram is not None:
+            kwargs['ram'] = ram
+        return self.connection.compute.update_quota_set(
+            project_id, **kwargs)
 
     def get_user(self, user_id):
         return self.connection.identity.get_user_by_id(user_id)
