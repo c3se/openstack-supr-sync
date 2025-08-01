@@ -1,1 +1,3 @@
 cloud_name: openstack
+database:
+  database_name: test_db
