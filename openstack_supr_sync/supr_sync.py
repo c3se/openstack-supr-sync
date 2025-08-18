@@ -1,9 +1,9 @@
 import datetime
 import itertools
 from .supr import SUPR, SUPRHTTPError
-from config import config
-from connection_manager import ConnectionManager
-from openstack_objects import OpenstackObjects
+from .config import config
+from .connection_manager import ConnectionManager
+from .openstack_objects import OpenstackObjects
 
 connection = ConnectionManager(config['cloud_name'])
 openstack_objects = OpenstackObjects(connection)
@@ -12,17 +12,23 @@ openstack_objects = OpenstackObjects(connection)
 def import_project_members(supr_proj, openstack_project, dry_run=False):
     supr_users = supr_proj.members
     supr_accounts = []
+    print(supr_users)
     for user in supr_users:
-        for account in user.accounts:
-            if account.resource.id == config['resource_id']:
-                supr_accounts.append(account.resource.username)
+        if 'accounts' in user:
+            for account in user.accounts:
+                if account.resource.id == config['supr']['resource_id']:
+                    supr_accounts.append(account.resource.username)
     supr_account_set = set(supr_accounts)
-    openstack_account_set = {u.id for u in openstack_project.members}
-
+    openstack_id_dict = {u.name: u.id for u in openstack_objects.get_users()}
+    try:
+        openstack_account_set = {u.name for u in openstack_project.members}
+    except AttributeError:
+        openstack_account_set = set()
     users_to_remove = openstack_account_set - supr_account_set
     users_to_add = supr_account_set - openstack_account_set
 
-    for user_id in users_to_remove:
+    for user in users_to_remove:
+        user_id = openstack_id_dict[user]
         if not dry_run:
             openstack_objects.remove_user_from_project(user_id, openstack_project.id)
 
@@ -36,7 +42,8 @@ def import_project_members(supr_proj, openstack_project, dry_run=False):
         print(f'Removing user {user_id} from project {openstack_project.name}')
 
     # Adding members.
-    for user_id in users_to_add:
+    for user in users_to_add:
+        user_id = openstack_id_dict[user]
         if not dry_run:
             openstack_objects.add_user_to_project(user_id, openstack_project.id)
             # tengil_person.send_email("Added to project {0} at C3SE, Chalmers".format(tengil_proj.name),
@@ -54,7 +61,7 @@ def import_project_members(supr_proj, openstack_project, dry_run=False):
 def disable_expired_projects(dry_run=False, verbose=False):
     supr = SUPR()
     # Search parameters
-    params = {'resource_id': config['resource_id'],
+    params = {'resource_id': config['supr']['resource_id'],
               'end_date_le': datetime.date.today()}
 
     try:
@@ -72,7 +79,7 @@ def limit_projects_without_resources(dry_run=False, verbose=False):
     supr = SUPR()
     # Search parameters
     params = {
-        'resource_id': config['resource_id'],  # C3SE
+        'resource_id': config['supr']['resource_id'],  # C3SE
         'end_date_ge': datetime.date.today() - datetime.timedelta(days=30)}
     # TODO: some kind of logic to limit projects that run out of currency here
 
@@ -81,7 +88,7 @@ def import_supr_projects(dry_run=False, verbose=False):
     supr = SUPR()
     # Search parameters
     params = {
-        'resource_id': config['resource_id'],  # C3SE
+        'resource_id': config['supr']['resource_id'],  # C3SE
         'end_date_ge': datetime.date.today() - datetime.timedelta(days=30),
     }
     try:
@@ -97,7 +104,7 @@ def import_supr_projects(dry_run=False, verbose=False):
     # active_project_requests = ProjectRequest.objects.all().values_list('suprid', flat=True)
     openstack_projects = {o.name: o for o in openstack_objects.get_projects()}
     for supr_project in supr_projects.matches:
-        if supr_project.directory_name in openstack_projects:
+        if supr_project.name in openstack_projects:
             openstack_project = openstack_projects[supr_project.name]
         else:
             openstack_project = openstack_objects.create_project(supr_project.name)
@@ -119,7 +126,7 @@ def update_account_in_supr(dry_run=False, verbose=False):
     supr = SUPR()
     openstack_accounts = openstack_objects.get_users()
     # Get Resource including account information from SUPR
-    supr_resource = supr.get('/resource/{0}/'.format(config['resource_id']))
+    supr_resource = supr.get('/resource/{0}/'.format(config['supr']['resource_id']))
     supr_set = {(a.username, a.status) for a in supr_resource.accounts}
     tengil_set = {(o.id, o.status) for o in openstack_accounts}
     update_accounts_in_supr = tengil_set - supr_set
@@ -131,7 +138,7 @@ def update_account_in_supr(dry_run=False, verbose=False):
                     "Updated account {0} to status \"{1}\"".format(openstack_id, status))
             if not dry_run:
                 supr.post(
-                    '/resource/{0}/account/{1}/update/'.format(config['resource_id'], openstack_id), params)
+                    '/resource/{0}/account/{1}/update/'.format(config['supr']['resource_id'], openstack_id), params)
         except SUPRHTTPError as e:
             print("{0}: HTTP error {1} from SUPR: {2}".format(
                 openstack_id, e.status_code, e.text))
@@ -139,27 +146,28 @@ def update_account_in_supr(dry_run=False, verbose=False):
 
 def import_users_from_account_requests(dry_run=False, verbose=False):
     supr = SUPR()
-    supr_resource = supr.get('/resource/%d/' % config['resource_suprid'])
+    supr_resource = supr.get('/resource/%d/' % int(config['supr']['resource_id']))
     openstack_users = openstack_objects.get_users()
     openstack_user_names = [o.name for o in openstack_users]
     for ar in supr_resource.accountrequests:
         if ar.status != 'Active':
             continue
-        for username in ar.requested_usernames:
-            if username not in openstack_user_names:
+        for un in ar.requested_usernames:
+            if un not in openstack_user_names:
+                username = un
                 break
-        else:
+        if username is None:
             if len(ar.requested_usernames) > 0:
                 base_username = ar.requested_usernames[0]
             else:
-                base_username = ar.person.first_name[:8]
+                base_username = ar.person.first_name[:8].lower()
                 if base_username not in openstack_user_names:
                     username = base_username
-                    break
-            for i in itertools.count(0, 1):
-                username = base_username + str(i)
-                if username not in openstack_user_names:
-                    break
+                else:
+                    for i in itertools.count(0, 1):
+                        username = base_username + str(i)
+                        if username not in openstack_user_names:
+                            break
         try:
             if verbose:
                 print(
@@ -168,11 +176,10 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
                 openstack_user = openstack_objects.create_user(username,
                                                                status='disabled')
                 params = {
-                    "username": openstack_user.id,
+                    "username": username,
                     "person_id": ar.person.id,
-                    "resource_id": config['resource_suprid'],
-                    "status": 'disabled',
-                    "note": f'username: {username}'}
+                    "resource_id": config['supr']['resource_id'],
+                    "status": 'disabled'}
                 supr.post('/account/create/', params)
         except SUPRHTTPError:
             openstack_objects.delete_user(openstack_user.id)

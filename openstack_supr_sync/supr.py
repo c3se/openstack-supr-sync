@@ -1,6 +1,9 @@
 import requests
 import simplejson
-import settings
+from .config import config, secrets
+
+secrets = secrets['supr']
+config = config['supr']
 
 
 # Our own exceptions
@@ -40,9 +43,9 @@ SUPRDecoder = simplejson.JSONDecoder(object_hook=lambda x: SUPRdict(x))
 
 class SUPR(object):
     def __init__(self):
-        self.base_url = settings.SUPR_API_BASE_URL
-        self.user = settings.SUPR_API_USER
-        self.password = settings.SUPR_API_PASSWORD
+        self.base_url = config['api_base_url']
+        self.user = secrets['api_user']
+        self.password = secrets['api_key']
 
     def get(self, url, params=None):
         url = self.base_url + url

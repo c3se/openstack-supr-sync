@@ -1,3 +1,6 @@
 cloud_name: openstack
 database:
   database_name: test_db
+supr:
+  api_base_url: https://disposer.c3se.chalmers.se/supr-test/api
+  resource_id: '62'
