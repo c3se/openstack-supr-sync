@@ -37,3 +37,4 @@ MANIFEST
 *.swp
 
 clouds.yaml
+secrets.yaml
