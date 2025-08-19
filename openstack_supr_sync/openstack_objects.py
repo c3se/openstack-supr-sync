@@ -97,6 +97,13 @@ class OpenstackObjects:
     def get_project(self, project_id):
         return self.connection.identity.get_project_by_id(project_id)
 
+    def get_project_members(self, project):
+        user_ids = [c['user']['id']
+                    for c in self.connection.identity.role_assignments(
+                    scope=dict(project=dict(id=project.id)))]
+        user_names = [self.connection.identity.get_user(uid)['name'] for uid in user_ids]
+        return user_names
+
     def update_project(self, project_id, **kwargs):
         return self.connection.identity.update_project(project_id, **kwargs)
 

@@ -49,21 +49,23 @@ CREATE_USAGE_RECORD = """
               """
 
 # The one microsecond is requires due to technicalities in postgres
-MIGRATE_ENTRIES_TO_RECORD = """
+MIGRATE_ENTRIES_TO_RECORD = ("""
         WITH moved_rows AS (
             SELECT * FROM coin_usage
             WHERE
                 LOWER(measurement_range) <= %(since_time)s
         )
         INSERT INTO coin_usage_record (project_id, usage, measurement_range)
-        SELECT project_id, usage, measurement_range FROM moved_rows;
-        UPDATE coin_usage
+        SELECT project_id, usage, measurement_range FROM moved_rows
+    """,
+                             """
+    UPDATE coin_usage
         SET
             usage = 0,
             measurement_range = tsrange(UPPER(measurement_range), UPPER(measurement_range) + '1 microsecond'::interval)
         WHERE
             LOWER(measurement_range) <= %(since_time)s
-    """
+    """)
 
 GET_ENTRY_BY_PROJECT_ID = "SELECT * FROM coin_usage WHERE project_id = %s"
 GET_ENTRY_RECORDS_BY_PROJECT_ID = "SELECT * FROM coin_usage_record WHERE project_id = %s"
@@ -105,6 +107,8 @@ def get_entry_by_project_id(project_id):
     """
     with cursor() as cur:
         result = cur.execute(GET_ENTRY_BY_PROJECT_ID, (project_id,)).fetchone()
+    if result is None:
+        return None
     return dict(project_id=result[0], usage=result[1],
                 last_measurement=result[2], measurement_range=result[3])
 
@@ -116,6 +120,8 @@ def get_entry_records_by_project_id(project_id):
     """
     with cursor() as cur:
         result = cur.execute(GET_ENTRY_RECORDS_BY_PROJECT_ID, (project_id,)).fetchall()
+    if result is None:
+        return None
     return [dict(project_id=r[0], usage=r[1],
                  measurement_range=r[2]) for r in result]
 
@@ -140,6 +146,8 @@ def get_usage_since_time(project_id: str, since_time: datetime):
         return min(max(dt2 / dt1, 0), 1.)
 
     last_entry = get_entry_by_project_id(project_id)
+    if last_entry is None:
+        return None
     if last_entry['measurement_range'].lower < since_time:
         logger.warning('since_time is more recent than'
                        ' the start time of the most recent'
@@ -148,12 +156,14 @@ def get_usage_since_time(project_id: str, since_time: datetime):
     total_usage = last_entry['usage']
     with cursor() as cur:
         records = cur.execute(GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME, (project_id, since_time)).fetchall()
-        records = [dict(project_id=r[0], usage=r[1],
-                        measurement_range=r[2]) for r in records]
+    records = [dict(project_id=r[0], usage=r[1],
+                    measurement_range=r[2]) for r in records]
     # Already sorted
-    total_usage += records[0]['usage'] * estimate_fraction(records[0])
-    for entry in records[1:]:
-        total_usage += entry['usage']
+    if len(records) > 0:
+        total_usage += records[0]['usage'] * estimate_fraction(records[0])
+        if len(records) > 1:
+            for entry in records[1:]:
+                total_usage += entry['usage']
     return total_usage
 
 
@@ -188,5 +198,7 @@ def migrate_usage_entries_to_record(since_time: datetime):
     table for the purpose of trapezoidal quadrature.
     """
     with cursor() as cur:
-        cur.execute(MIGRATE_ENTRIES_TO_RECORD,
+        cur.execute(MIGRATE_ENTRIES_TO_RECORD[0],
+                    dict(since_time=since_time,))
+        cur.execute(MIGRATE_ENTRIES_TO_RECORD[1],
                     dict(since_time=since_time,))
