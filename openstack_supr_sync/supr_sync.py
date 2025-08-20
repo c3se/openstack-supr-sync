@@ -35,7 +35,8 @@ def import_project_members(supr_proj, openstack_project, supr_resource, dry_run=
             #                                          project=tengil_proj,
             #                                          resources=', '.join(list_of_resources)))
 
-        print(f'Removing user {user_id} from project {openstack_project.name}')
+        print(f'Removing user {user} [{user_id}] from project'
+              f' {openstack_project.name} [{openstack_project.id}]')
 
     # Adding members.
     for user in users_to_add:
@@ -67,11 +68,14 @@ def disable_expired_projects(dry_run=False, verbose=False):
         raise e
     openstack_projects = {o.name: o for o in openstack_objects.get_projects()}
     for supr_project in supr_projects.matches:
-        if datetime.date.fromisoformat(supr_project.expires) < datetime.date.today():
-            openstack_objects.update_project(openstack_projects[supr_project.name], state='disabled')
+        if verbose:
+            print(f'Disabling {supr_project.name}')
+        if not dry_run:
+            openstack_objects.update_project(
+                openstack_projects[supr_project.name], is_enabled=False)
 
 
-def limit_projects_without_resources(dry_run=False, verbose=False):
+def update_project_openstack_quotas(dry_run=False, verbose=False):
     supr = SUPR()
     # Search parameters
     params = {
@@ -90,18 +94,59 @@ def limit_projects_without_resources(dry_run=False, verbose=False):
         if o.name in supr_project_names}
     current_time = datetime.datetime.now()
     past_time = current_time - datetime.timedelta(days=30)
+    limited_quota = dict(cores=1, instances=1, ram=2048)
+    default_quota = dict(cores=256, instances=256, ram=2048*256*4)
     for p, p_id in openstack_projects.items():
         usage = get_usage_since_time(p_id, past_time)
+        if usage is None:
+            if not dry_run:
+                openstack_objects.set_project_quota(p, default_quota)
+            continue
         if verbose:
             print(f'Project: {p} [{p_id}]')
             print(f'Allocation: {supr_project_allocations[p]} coins per 30 days')
             print(f'Usage: {usage} for the past 30 days')
 
-        if usage is None:
-            continue
         if usage > float(supr_project_allocations[p]):
-            pass
-            # TODO: openstack logic that sets limitations on number of cores etc
+            quota = limited_quota
+            if verbose:
+                print(f'Limiting quota for project {p}')
+        else:
+            quota = default_quota
+        if not dry_run:
+            openstack_objects.set_project_quota(p, quota)
+
+
+def disable_and_enable_openstack_accounts(dry_run=False, verbose=False):
+    supr = SUPR()
+    params = {
+        'resource_id': config['supr']['resource_id'],  # C3SE
+        'end_date_ge': datetime.date.today() - datetime.timedelta(days=30),
+    }
+    try:
+        supr_projects = supr.get('/project/search/', params=params)
+        supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
+    except SUPRHTTPError as e:
+        # We want to show the text received if we get an HTTP Error
+        print("HTTP error {0} from SUPR:".format(e.status_code))
+        print(e.text)
+        raise
+
+    if verbose:
+        print("Currently there are {0} active projects at C3SE present in SUPR".format(
+            len(supr_projects.matches)))
+    # active_project_requests = ProjectRequest.objects.all().values_list('suprid', flat=True)
+    openstack_projects = {o.name: o for o in openstack_objects.get_projects()}
+    active_members = set()
+    supr_accounts = {a.username for a in supr_resource.accounts}
+    for supr_project in supr_projects.matches:
+        if openstack_projects[supr_project.name].is_enabled:
+            active_members |= set(openstack_objects.get_project_members(openstack_projects[supr_project.name]))
+    accounts_without_projects = supr_accounts - active_members
+    for user in accounts_without_projects:
+        openstack_objects.update_user(user, is_enabled=False)
+    for user in active_members:
+        openstack_objects.update_user(user, is_enabled=True)
 
 
 def import_supr_projects(dry_run=False, verbose=False):
@@ -147,7 +192,9 @@ def update_account_in_supr(dry_run=False, verbose=False):
     # Get Resource including account information from SUPR
     supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
     supr_set = {(a.username, a.status) for a in supr_resource.accounts}
-    tengil_set = {(o.id, o.status) for o in openstack_accounts}
+    supr_names = [a.username for a in supr_resource.accounts]
+    status_map = {True: 'enabled', False: 'disabled'}
+    tengil_set = {(o.name, status_map[o.is_enabled]) for o in openstack_accounts if o.name in supr_names}
     update_accounts_in_supr = tengil_set - supr_set
     for openstack_id, status in update_accounts_in_supr:
         params = {"status": status}
@@ -160,8 +207,7 @@ def update_account_in_supr(dry_run=False, verbose=False):
                     f'/resource/{config["supr"]["resource_id"]}/account/{openstack_id}/update/',
                     params)
         except SUPRHTTPError as e:
-            print("{0}: HTTP error {1} from SUPR: {2}".format(
-                openstack_id, e.status_code, e.text))
+            print(f'{openstack_id}: HTTP error {e.status_code} from SUPR: {e.text}')
 
 
 def import_users_from_account_requests(dry_run=False, verbose=False):

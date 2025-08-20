@@ -66,17 +66,12 @@ class OpenstackObjects:
         return self.connection.compute.update_quota_set(
             project_id, **kwargs)
 
-    def get_user(self, user_id):
-        return self.connection.identity.get_user_by_id(user_id)
+    def get_user(self, user):
+        return self.connection.get_user(user)
 
-    def find_user(self, name=None, user_id=None, filters=None, domain_id=None):
-        if user_id is not None:
-            self.get_user(user_id)
-        else:
-            return self.connection.identity.get_user(name, filters, domain_id)
-
-    def update_user(self, project_id, **kwargs):
-        return self.connection.identity.update_user(project_id, **kwargs)
+    def update_user(self, user, **kwargs):
+        user = self.get_user(user)
+        return self.connection.identity.update_user(user, **kwargs)
 
     def create_user(self, name, **kwargs):
         """
@@ -118,6 +113,9 @@ class OpenstackObjects:
         """
         kwargs['name'] = name
         return self.connection.identity.create_project(**kwargs)
+
+    def set_project_quota(self, project, quota):
+        return self.connection.set_compute_quotas(project, **quota)
 
     def add_user_to_project(self, project_id, user_id):
         """
