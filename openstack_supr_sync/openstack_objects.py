@@ -33,7 +33,8 @@ class OpenstackObjects:
                                   project_id,
                                   storage_in_gb=None,
                                   number_of_volumes=None,
-                                  number_of_snapshots=None):
+                                  number_of_snapshots=None,
+                                  number_of_backups=None):
         """
         Sets the 'gigabytes' storage quota which modifies the total size
         of volumes and volume snapshots, as well as the number of volumes nad snaphsots.
@@ -47,6 +48,8 @@ class OpenstackObjects:
             kwargs['volumes'] = number_of_volumes
         if number_of_snapshots is not None:
             kwargs['snapshots'] = number_of_snapshots
+        if number_of_backups is not None:
+            kwargs['backups'] = number_of_backups
         return self.connection.block_storage.update_quota_set(
             project_id, **kwargs)
 

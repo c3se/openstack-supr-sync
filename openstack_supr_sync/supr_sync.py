@@ -88,10 +88,21 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
         for r in supr_project_allocations[name]:
             if int(r.resource.id) == int(config['supr']['resource_id']):
                 resource = r
-        supr_project_allocations[name] = resource.allocated
+            elif int(r.resource.id) == int(config['supr']['storage_id']):
+                storage = r
+        # TiB to GiB
+        supr_project_allocations[name] = dict(coins=resource.allocated,
+                                              storage=storage.allocated * 1000)
     openstack_projects = {
         o.name: o.id for o in openstack_objects.get_projects()
         if o.name in supr_project_names}
+    for p, p_id in openstack_projects.items():
+        openstack_objects.set_project_storage_quota(
+            p_id,
+            storage_in_gb=supr_project_allocations[p]['storage'],
+            number_of_snapshots=100,
+            number_of_volumes=100,
+            number_of_backups=100)
     current_time = datetime.datetime.now()
     past_time = current_time - datetime.timedelta(days=30)
     limited_quota = dict(cores=1, instances=1, ram=2048)
@@ -104,10 +115,10 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
             continue
         if verbose:
             print(f'Project: {p} [{p_id}]')
-            print(f'Allocation: {supr_project_allocations[p]} coins per 30 days')
+            print(f'Allocation: {supr_project_allocations[p]["coins"]} coins per 30 days')
             print(f'Usage: {usage} for the past 30 days')
 
-        if usage > float(supr_project_allocations[p]):
+        if usage > float(supr_project_allocations[p]['coins']):
             quota = limited_quota
             if verbose:
                 print(f'Limiting quota for project {p}')
@@ -141,7 +152,8 @@ def disable_and_enable_openstack_accounts(dry_run=False, verbose=False):
     supr_accounts = {a.username for a in supr_resource.accounts}
     for supr_project in supr_projects.matches:
         if openstack_projects[supr_project.name].is_enabled:
-            active_members |= set(openstack_objects.get_project_members(openstack_projects[supr_project.name]))
+            active_members |= set(openstack_objects.get_project_members(
+                openstack_projects[supr_project.name]))
     accounts_without_projects = supr_accounts - active_members
     for user in accounts_without_projects:
         openstack_objects.update_user(user, is_enabled=False)

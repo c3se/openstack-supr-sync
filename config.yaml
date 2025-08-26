@@ -4,3 +4,4 @@ database:
 supr:
   api_base_url: https://disposer.c3se.chalmers.se/supr-test/api
   resource_id: '62'
+  storage_id: '63'
