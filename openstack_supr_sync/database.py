@@ -1,12 +1,11 @@
 import psycopg
-from .config import config
+from .config import config, secrets
 from contextlib import contextmanager
 from datetime import timedelta, datetime
 import logging
 
 logger = logging.getLogger(__name__)
 
-database_name = config['database']['database_name']
 
 
 CREATE_USAGE_TABLE = """
@@ -76,7 +75,10 @@ GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME = """
                                       UPPER(measurement_range) > %s
                                   ORDER BY UPPER(measurement_range);
                                   """
-with psycopg.connect('user=postgres') as conn:
+database_name = config['database']['name']
+database_user = config['database']['user']
+database_password = secrets['database']['password']
+with psycopg.connect(f'user={database_user} password={database_password}') as conn:
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s", (database_name,))
@@ -91,7 +93,7 @@ def cursor():
     """
     Convenience context manager for psycopg.
     """
-    with psycopg.connect(f'dbname={database_name} user=postgres') as conn:
+    with psycopg.connect(f'user={database_user} password={database_password}') as conn:
         with conn.cursor() as cur:
             yield cur
 
