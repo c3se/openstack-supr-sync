@@ -8,7 +8,7 @@ StartLimitBurst=5
 [Service]
 Type=simple
 Environment=OPENSTACK_SUPR_SYNC_CONFIG_PATH=/etc/openstack-supr-sync/config.yaml
-Environment=OPENSTACK_SUPR_SYNC_FLAVOR_PATH=/etc/openstack-supr-sync/flavor_accounting.yaml
+Environment=OPENSTACK_SUPR_SYNC_FLAVOR_PATH=/etc/openstack-supr-sync/flavor_table.yaml
 Environment=OPENSTACK_SUPR_SYNC_SECRETS_PATH=/etc/openstack-supr-sync/secrets.yaml
 WorkingDirectory=/opt/openstack-supr-sync
 ExecStart=/opt/openstack-supr-sync/accounting.py
