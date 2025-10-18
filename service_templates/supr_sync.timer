@@ -3,7 +3,7 @@ Description="Sync OpenStack with SUPR"
 
 [Timer]
 OnCalendar=*:0,15,30,45
-Unit=supr-sync.service
+Unit=supr_sync.service
 
 [Install]
 WantedBy=multi-user.target
