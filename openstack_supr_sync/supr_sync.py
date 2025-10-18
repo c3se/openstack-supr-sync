@@ -1,10 +1,14 @@
 import datetime
 import itertools
+import logging
+import re
 from .supr import SUPR, SUPRHTTPError
 from .config import config
 from .connection_manager import ConnectionManager
 from .openstack_objects import OpenstackObjects
 from .database import get_usage_since_time
+
+logger = logging.getLogger(__name__)
 
 connection = ConnectionManager(config['cloud_name'])
 openstack_objects = OpenstackObjects(connection)
@@ -28,31 +32,17 @@ def import_project_members(supr_proj, openstack_project, supr_resource, dry_run=
         if not dry_run:
             openstack_objects.remove_user_from_project(openstack_project.id, user_id)
 
-            # Email User
-            # tengil_person.send_email("Removed from project {0} at C3SE, Chalmers".format(tengil_proj.name),
-            #                          "view/email_user_removed_from_project.txt",
-            #                          extra_dict=dict(user=tengil_person,
-            #                                          project=tengil_proj,
-            #                                          resources=', '.join(list_of_resources)))
-
-        print(f'Removing user {user} [{user_id}] from project'
-              f' {openstack_project.name} [{openstack_project.id}]')
+        logger.info(f'Removing user {user} [{user_id}] from project'
+                    f' {openstack_project.name} [{openstack_project.id}]')
 
     # Adding members.
     for user in users_to_add:
         user_id = openstack_id_dict[user]
         if not dry_run:
             openstack_objects.add_user_to_project(openstack_project.id, user_id)
-            # tengil_person.send_email("Added to project {0} at C3SE, Chalmers".format(tengil_proj.name),
-            #                          "view/email_user_added_to_project.txt",
-            #                          extra_dict=dict(user=tengil_person,
-            #                                          project=tengil_proj,
-            #                                          has_compute=has_compute,
-            #                                          has_storage=has_storage,
-            #                                          missing_account=missing_account,
-            #                                          resources=', '.join(list_of_resources)))
 
-        print(f'Adding user {user}, {user_id} to project {openstack_project.name}, {openstack_project.id}')
+        logger.info(
+            f'Adding user {user}, {user_id} to project {openstack_project.name}, {openstack_project.id}')
 
 
 def disable_expired_projects(dry_run=False, verbose=False):
@@ -64,12 +54,12 @@ def disable_expired_projects(dry_run=False, verbose=False):
     try:
         supr_projects = supr.get('/project/search/', params=params)
     except SUPRHTTPError as e:
-        print("HTTP error {0} from SUPR:".format(e.status_code))
+        logger.info("HTTP error {0} from SUPR:".format(e.status_code))
         raise e
     openstack_projects = {o.name: o for o in openstack_objects.get_projects()}
     for supr_project in supr_projects.matches:
         if verbose:
-            print(f'Disabling {supr_project.name}')
+            logger.info(f'Disabling {supr_project.name}')
         if not dry_run:
             openstack_objects.update_project(
                 openstack_projects[supr_project.name], is_enabled=False)
@@ -114,14 +104,14 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
                 openstack_objects.set_project_quota(p, default_quota)
             continue
         if verbose:
-            print(f'Project: {p} [{p_id}]')
-            print(f'Allocation: {supr_project_allocations[p]["coins"]} coins per 30 days')
-            print(f'Usage: {usage} for the past 30 days')
+            logger.info(f'Project: {p} [{p_id}]')
+            logger.info(f'Allocation: {supr_project_allocations[p]["coins"]} coins per 30 days')
+            logger.info(f'Usage: {usage} for the past 30 days')
 
         if usage > float(supr_project_allocations[p]['coins']):
             quota = limited_quota
             if verbose:
-                print(f'Limiting quota for project {p}')
+                logger.info(f'Limiting quota for project {p}')
         else:
             quota = default_quota
         if not dry_run:
@@ -139,12 +129,12 @@ def disable_and_enable_openstack_accounts(dry_run=False, verbose=False):
         supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
     except SUPRHTTPError as e:
         # We want to show the text received if we get an HTTP Error
-        print("HTTP error {0} from SUPR:".format(e.status_code))
-        print(e.text)
+        logger.info("HTTP error {0} from SUPR:".format(e.status_code))
+        logger.info(e.text)
         raise
 
     if verbose:
-        print("Currently there are {0} active projects at C3SE present in SUPR".format(
+        logger.info("Currently there are {0} active projects at C3SE present in SUPR".format(
             len(supr_projects.matches)))
     # active_project_requests = ProjectRequest.objects.all().values_list('suprid', flat=True)
     openstack_projects = {o.name: o for o in openstack_objects.get_projects()}
@@ -173,12 +163,12 @@ def import_supr_projects(dry_run=False, verbose=False):
         supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
     except SUPRHTTPError as e:
         # We want to show the text received if we get an HTTP Error
-        print("HTTP error {0} from SUPR:".format(e.status_code))
-        print(e.text)
+        logger.info("HTTP error {0} from SUPR:".format(e.status_code))
+        logger.info(e.text)
         raise
 
     if verbose:
-        print("Currently there are {0} active projects at C3SE present in SUPR".format(
+        logger.info("Currently there are {0} active projects at C3SE present in SUPR".format(
             len(supr_projects.matches)))
     # active_project_requests = ProjectRequest.objects.all().values_list('suprid', flat=True)
     openstack_projects = {o.name: o for o in openstack_objects.get_projects()}
@@ -212,14 +202,14 @@ def update_account_in_supr(dry_run=False, verbose=False):
         params = {"status": status}
         try:
             if verbose:
-                print(
+                logger.info(
                     f'Updated account {openstack_id} to status "{status}"')
             if not dry_run:
                 supr.post(
                     f'/resource/{config["supr"]["resource_id"]}/account/{openstack_id}/update/',
                     params)
         except SUPRHTTPError as e:
-            print(f'{openstack_id}: HTTP error {e.status_code} from SUPR: {e.text}')
+            logger.info(f'{openstack_id}: HTTP error {e.status_code} from SUPR: {e.text}')
 
 
 def import_users_from_account_requests(dry_run=False, verbose=False):
@@ -229,27 +219,27 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
     openstack_user_names = [o.name for o in openstack_users]
     for ar in supr_resource.accountrequests:
         username = None
-        if ar.status != 'Active':
+        if ar.status.lower() != 'active':
             continue
         for un in ar.requested_usernames:
+            un = un.lower()
+            if not re.match(r'^[a-z0-9_-]+$', un):
+                continue
             if un not in openstack_user_names:
                 username = un
                 break
         if username is None:
-            if len(ar.requested_usernames) > 0:
-                base_username = ar.requested_usernames[0]
+            base_username = ar.person.first_name[:8].lower()
+            if base_username not in openstack_user_names:
+                username = base_username
             else:
-                base_username = ar.person.first_name[:8].lower()
-                if base_username not in openstack_user_names:
-                    username = base_username
-                else:
-                    for i in itertools.count(0, 1):
-                        username = base_username + str(i)
-                        if username not in openstack_user_names:
-                            break
+                for i in itertools.count(0, 1):
+                    username = base_username + str(i)
+                    if username not in openstack_user_names:
+                        break
         try:
             if verbose:
-                print(
+                logger.info(
                     "Created account {0}".format(username))
             if not dry_run:
                 openstack_user = openstack_objects.create_user(username,
@@ -262,4 +252,12 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
                 supr.post('/account/create/', params)
         except SUPRHTTPError:
             openstack_objects.delete_user(openstack_user.id)
-            print("Cannot connect to SUPR, deleting user!")
+            logger.info("Cannot connect to SUPR, deleting user!")
+
+
+if __name__ == '__main__':
+    import_users_from_account_requests(verbose=True)
+    import_supr_projects(verbose=True)
+    disable_and_enable_openstack_accounts(verbose=True)
+    disable_expired_projects(verbose=True)
+    update_account_in_supr(verbose=True)

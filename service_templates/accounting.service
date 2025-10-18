@@ -1,0 +1,19 @@
+[Unit]
+Description=Accounting service
+Requires=postgresql.service
+After=postgresql.service
+StartLimitInterval=200
+StartLimitBurst=5
+
+[Service]
+Type=simple
+Environment=OPENSTACK_SUPR_SYNC_CONFIG_PATH=/etc/openstack-supr-sync/config.yaml
+Environment=OPENSTACK_SUPR_SYNC_FLAVOR_PATH=/etc/openstack-supr-sync/flavor_accounting.yaml
+Environment=OPENSTACK_SUPR_SYNC_SECRETS_PATH=/etc/openstack-supr-sync/secrets.yaml
+WorkingDirectory=/opt/openstack-supr-sync
+ExecStart=/opt/openstack-supr-sync/accounting.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
