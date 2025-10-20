@@ -1,0 +1,18 @@
+[Unit]
+Description="Sync from SUPR"
+
+[Service]
+Type=oneshot
+SyslogIdentifier=supr-sync
+Environment="PYTHONIOENCODING=utf8"
+
+[Service]
+Type=oneshot
+Environment=OPENSTACK_SUPR_SYNC_CONFIG_PATH=/etc/openstack-supr-sync/config.yaml
+Environment=OPENSTACK_SUPR_SYNC_SECRETS_PATH=/etc/openstack-supr-sync/secrets.yaml
+WorkingDirectory=/opt/openstack-supr-sync
+ExecStart=/opt/openstack-supr-sync/records.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

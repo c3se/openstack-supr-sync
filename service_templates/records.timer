@@ -1,0 +1,9 @@
+[Unit]
+Description="Sync OpenStack with SUPR"
+
+[Timer]
+OnCalendar=*,37
+Unit=records.service
+
+[Install]
+WantedBy=multi-user.target
