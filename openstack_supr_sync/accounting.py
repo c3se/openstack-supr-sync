@@ -24,17 +24,28 @@ while not signal_handler.shutdown_requested:
     start = time()
     projects = openstack_objects.get_projects()
     projects = [entry for entry in projects if re.search(project_pattern, entry.name)]
+    users = {u.id: u.name for u in openstack_objects.get_users()}
     projects_lookup = {project.id: project.name for project in projects}
     now = datetime.now(tz=tz).replace(tzinfo=None)
-    servers = [(s.flavor.name, s.project_id)
+    servers = [dict(instance_id=s.id,
+                    flavor=s.flavor.name,
+                    project=projects_lookup[s.project_id],
+                    user=users[s.user_id],
+                    zone=s.availability_zone,
+                    allocated_cpu=s.flavor.vcpus,
+                    allocated_disk=s.flavor.disk + s.flavor.ephemeral,
+                    allocated_memory=s.flavor.ram,
+                    state=s.status)
                for s in openstack_objects.get_servers() if s.project_id in projects_lookup]
     project_accounting_table = {project.name: 0 for project in projects}
-    for flavor, sid in servers:
-        logger.info(f'Server {flavor}: {projects_lookup[sid]}, cost {flavor_table[flavor]}')
-        project_accounting_table[projects_lookup[sid]] += flavor_table[flavor]
-    for p in project_accounting_table:
-        logger.info(f'Update usage for project {p}: {project_accounting_table[p]} coins')
-        update_usage(p, project_accounting_table[p], now)
+    for sd in servers:
+        logger.info(f'Server {sd["flavor"]}: {sd["project"]}, cost {flavor_table[sd["flavor"]]}')
+        # third argument is a dict that becomes a jsonb blob and is extracted at reporting time
+        if sd.pop('state').lower() == 'active':
+            cost = flavor_table[sd["flavor"]]
+        else:
+            cost = 0.
+        update_usage(sd.pop('project'), sd.pop('instance_id'), sd, cost, now)
     sleep_time = 0
     local_timeout = max(0, 30 + start - time())
     while not signal_handler.shutdown_requested:

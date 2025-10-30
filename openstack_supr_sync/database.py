@@ -1,4 +1,5 @@
 import psycopg
+from psycopg.types.json import Jsonb
 from .config import config, secrets
 from contextlib import contextmanager
 from datetime import timedelta, datetime
@@ -7,10 +8,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
 CREATE_USAGE_TABLE = """
     CREATE TABLE IF NOT EXISTS coin_usage
-    (project_id TEXT PRIMARY KEY,
+    (project_id TEXT,
+    instance_id TEXT PRIMARY KEY,
+    metadata JSONB,
     usage DOUBLE PRECISION,
     last_measurement DOUBLE PRECISION,
     measurement_range TSRANGE);
@@ -19,55 +21,122 @@ CREATE_USAGE_TABLE = """
 CREATE_USAGE_RECORD_TABLE = """
     CREATE TABLE IF NOT EXISTS coin_usage_record
     (project_id TEXT,
+    instance_id TEXT,
+    metadata JSONB,
     usage DOUBLE PRECISION,
     measurement_range TSRANGE);
     """
 
+CREATE_USAGE_ARCHIVE_TABLE = """
+    CREATE TABLE IF NOT EXISTS coin_usage_archive
+    (project_id TEXT,
+    instance_id TEXT,
+    metadata JSONB,
+    usage DOUBLE PRECISION,
+    measurement_range TSRANGE);
+    """
+
+CREATE_BLOCK_STORAGE_RECORD_TABLE = """
+    CREATE TABLE IF NOT EXISTS block_storage_record
+    (project_id TEXT,
+    instance_usage DOUBLE PRECISION,
+    volume_usage DOUBLE PRECISION,
+    backup_usage DOUBLE PRECISION,
+    record_time TIMESTAMP);
+    """
+
+CREATE_BLOCK_STORAGE_ARCHIVE_TABLE = """
+    CREATE TABLE IF NOT EXISTS block_storage_archive
+    (project_id TEXT,
+    instance_usage DOUBLE PRECISION,
+    volume_usage DOUBLE PRECISION,
+    backup_usage DOUBLE PRECISION,
+    record_time TIMESTAMP);
+    """
+
+CREATE_BLOCK_STORAGE_RECORD = """
+    INSERT INTO block_storage_record
+    (project_id, instance_usage, volume_usage, backup_usage,
+    record_time)
+    VALUES (%s, %s, %s, %s, %s);
+    """
+
 CREATE_USAGE_ENTRY = """
-              INSERT INTO coin_usage
-              (project_id, usage, last_measurement,
-              measurement_range)
-              VALUES (%s, %s, %s, TSRANGE(%s, %s));
-              """
+    INSERT INTO coin_usage
+    (project_id, instance_id, metadata, usage, last_measurement,
+    measurement_range)
+    VALUES (%s, %s, %s, %s, %s, TSRANGE(%s, %s));
+    """
 
 
 UPDATE_USAGE_ENTRY = """
-              UPDATE coin_usage SET
-                  usage = usage + 0.5 * (last_measurement + %(new_measurement)s) *
-                      (EXTRACT(EPOCH FROM (%(timestamp)s - UPPER(measurement_range)))::decimal / 3600),
-                  last_measurement = %(new_measurement)s,
-                  measurement_range = tsrange(LOWER(measurement_range), %(timestamp)s)
-              WHERE project_id = %(project_id)s;
-              """
+    UPDATE coin_usage SET
+        usage = usage + 0.5 * (last_measurement + %(new_measurement)s) *
+            (EXTRACT(EPOCH FROM (%(timestamp)s - UPPER(measurement_range)))::decimal / 3600),
+        last_measurement = %(new_measurement)s,
+        measurement_range = tsrange(LOWER(measurement_range), %(timestamp)s)
+    WHERE instance_id = %(instance_id)s;
+    """
 
 CREATE_USAGE_RECORD = """
-              INSERT INTO coin_usage_record
-              (project_id, usage,
-              measurement_range)
-              VALUES (%s, %s, tsrange(%s, %s));
-              """
+    INSERT INTO coin_usage_record
+    (project_id, instance_id, metadata, usage,
+    measurement_range)
+    VALUES (%s, %s, %s, %s, tsrange(%s, %s));
+    """
 
 # The one microsecond is requires due to technicalities in postgres
 MIGRATE_ENTRIES_TO_RECORD = ("""
-        WITH moved_rows AS (
-            SELECT * FROM coin_usage
-            WHERE
-                LOWER(measurement_range) <= %(since_time)s
-        )
-        INSERT INTO coin_usage_record (project_id, usage, measurement_range)
-        SELECT project_id, usage, measurement_range FROM moved_rows
+    WITH moved_rows AS (
+        SELECT * FROM coin_usage
+        WHERE
+            LOWER(measurement_range) <= %(since_time)s
+    )
+    INSERT INTO coin_usage_record (project_id, instance_id, metadata, usage, measurement_range)
+    SELECT project_id, instance_id, metadata, usage, measurement_range FROM moved_rows
     """,
                              """
     UPDATE coin_usage
         SET
             usage = 0,
-            measurement_range = tsrange(UPPER(measurement_range), UPPER(measurement_range) + '1 microsecond'::interval)
+            measurement_range = tsrange(
+                UPPER(measurement_range), UPPER(measurement_range) + '1 microsecond'::interval)
         WHERE
             LOWER(measurement_range) <= %(since_time)s
     """)
 
+# migrate record by record to archive on generating report
+MIGRATE_RECORD_TO_ARCHIVE = """
+    WITH selected_row AS (
+        SELECT * FROM coin_usage_record
+        WHERE
+            instance_id = %(instance_id)s
+            AND
+            measurement_range = tsrange(%(lower_ts)s, %(upper_ts)s)
+    )
+    INSERT INTO coin_usage_archive (project_id, instance_id, metadata, usage, measurement_range)
+    SELECT project_id, instance_id, metadata, usage, measurement_range
+    FROM selected_row;
+    """
+
+ARCHIVE_BLOCK_STORAGE_RECORDS = """
+    WITH selected_rows AS (
+        SELECT * FROM block_storage_record
+        WHERE
+            project_id = %(project_id)s
+            AND
+            record_time = %(timestamp)s
+    )
+    INSERT INTO block_storage_archive (project_id, instance_usage, volume_usage, backup_usage, record_time)
+    SELECT project_id, instance_usage, volume_usage, backup_usage, record_time
+    FROM selected_rows;
+    """
+
 GET_ENTRY_BY_PROJECT_ID = "SELECT * FROM coin_usage WHERE project_id = %s"
+GET_ENTRY_BY_INSTANCE_ID = "SELECT * FROM coin_usage WHERE instance_id = %s"
 GET_ENTRY_RECORDS_BY_PROJECT_ID = "SELECT * FROM coin_usage_record WHERE project_id = %s"
+GET_ENTRY_RECORDS = "SELECT * FROM coin_usage_record"
+GET_BLOCK_STORAGE_RECORDS = "SELECT * FROM block_storage_record"
 GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME = """
                                   SELECT * FROM coin_usage_record
                                   WHERE
@@ -93,7 +162,7 @@ def cursor():
     """
     Convenience context manager for psycopg.
     """
-    with psycopg.connect(f'user={database_user} password={database_password}') as conn:
+    with psycopg.connect(f'user={database_user} password={database_password} dbname={database_name}') as conn:
         with conn.cursor() as cur:
             yield cur
 
@@ -101,6 +170,9 @@ def cursor():
 with cursor() as cur:
     cur.execute(CREATE_USAGE_TABLE)
     cur.execute(CREATE_USAGE_RECORD_TABLE)
+    cur.execute(CREATE_USAGE_ARCHIVE_TABLE)
+    cur.execute(CREATE_BLOCK_STORAGE_RECORD_TABLE)
+    cur.execute(CREATE_BLOCK_STORAGE_ARCHIVE_TABLE)
 
 
 def get_entry_by_project_id(project_id):
@@ -108,11 +180,11 @@ def get_entry_by_project_id(project_id):
     Gets the current active entry for each project id.
     """
     with cursor() as cur:
-        result = cur.execute(GET_ENTRY_BY_PROJECT_ID, (project_id,)).fetchone()
+        result = cur.execute(GET_ENTRY_BY_PROJECT_ID, (project_id,)).fetchall()
     if result is None:
         return None
-    return dict(project_id=result[0], usage=result[1],
-                last_measurement=result[2], measurement_range=result[3])
+    return [dict(project_id=r[0], instance_id=r[1], metadata=r[2], usage=r[3],
+                 measurement_range=r[4]) for r in result]
 
 
 def get_entry_records_by_project_id(project_id):
@@ -124,8 +196,8 @@ def get_entry_records_by_project_id(project_id):
         result = cur.execute(GET_ENTRY_RECORDS_BY_PROJECT_ID, (project_id,)).fetchall()
     if result is None:
         return None
-    return [dict(project_id=r[0], usage=r[1],
-                 measurement_range=r[2]) for r in result]
+    return [dict(project_id=r[0], instance_id=r[1], metadata=r[2], usage=r[3],
+                 measurement_range=r[4]) for r in result]
 
 
 def get_usage_since_time(project_id: str, since_time: datetime):
@@ -147,29 +219,23 @@ def get_usage_since_time(project_id: str, since_time: datetime):
         dt2 = (entry['measurement_range'].upper - since_time).seconds
         return min(max(dt2 / dt1, 0), 1.)
 
-    last_entry = get_entry_by_project_id(project_id)
-    if last_entry is None:
+    last_entries = get_entry_by_project_id(project_id)
+    if len(last_entries) == 0:
         return None
-    if last_entry['measurement_range'].lower < since_time:
-        logger.warning('since_time is more recent than'
-                       ' the start time of the most recent'
-                       ' measurement, usage may be overestimated!')
-        return last_entry['usage'] * estimate_fraction(last_entry)
-    total_usage = last_entry['usage']
+    total_usage = 0.
     with cursor() as cur:
         records = cur.execute(GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME, (project_id, since_time)).fetchall()
-    records = [dict(project_id=r[0], usage=r[1],
-                    measurement_range=r[2]) for r in records]
-    # Already sorted
+    records = last_entries + [dict(usage=r[3],
+                                   measurement_range=r[4]) for r in records]
+    records = sorted(records, lambda r: r['measurement_range'].upper)
     if len(records) > 0:
-        total_usage += records[0]['usage'] * estimate_fraction(records[0])
-        if len(records) > 1:
-            for entry in records[1:]:
-                total_usage += entry['usage']
+        for entry in records[1:]:
+            total_usage += entry['usage'] * estimate_fraction(entry)
     return total_usage
 
 
-def update_usage(project_id: str, usage_rate: float, timestamp: datetime):
+def update_usage(project_id: str, instance_id: str, metadata: dict,
+                 usage_rate: float, timestamp: datetime):
     """
     Updates the resource usage of the project specified by the project ID,
     by giving the current usage rate and the timestamp of the measurement.
@@ -178,7 +244,7 @@ def update_usage(project_id: str, usage_rate: float, timestamp: datetime):
     specified by `timestamp`, giving the estimated total usage for this time period.
     """
     with cursor() as cur:
-        entry = cur.execute(GET_ENTRY_BY_PROJECT_ID, (project_id,)).fetchone()
+        entry = cur.execute(GET_ENTRY_BY_INSTANCE_ID, (instance_id,)).fetchone()
         if entry is None:
             # Set upper bound of timestamp range to one microsecond ahead
             # corresponding to a single measured point in time
@@ -186,11 +252,11 @@ def update_usage(project_id: str, usage_rate: float, timestamp: datetime):
             one_microsecond_ahead = timestamp + timedelta(microseconds=1)
             # Integral over a point is always zero but rate is used
             # in next measurement
-            cur.execute(CREATE_USAGE_ENTRY, (project_id, 0,
-                        usage_rate, timestamp, one_microsecond_ahead))
+            cur.execute(CREATE_USAGE_ENTRY, (project_id, instance_id, Jsonb(metadata),
+                        0., usage_rate, timestamp, one_microsecond_ahead))
         else:
             cur.execute(UPDATE_USAGE_ENTRY, dict(new_measurement=usage_rate,
-                        timestamp=timestamp, project_id=project_id))
+                        timestamp=timestamp, instance_id=instance_id))
 
 
 def migrate_usage_entries_to_record(since_time: datetime):
@@ -204,3 +270,45 @@ def migrate_usage_entries_to_record(since_time: datetime):
                     dict(since_time=since_time,))
         cur.execute(MIGRATE_ENTRIES_TO_RECORD[1],
                     dict(since_time=since_time,))
+
+
+def create_block_storage_record(project_id: str, instance_usage: float,
+                                volume_usage: float, backup_usage: float,
+                                timestamp: datetime):
+    with cursor() as cur:
+        cur.execute(CREATE_BLOCK_STORAGE_RECORD,
+                    (project_id, instance_usage, volume_usage,
+                     backup_usage, timestamp))
+
+
+def get_block_storage_records():
+    with cursor() as cur:
+        records = cur.execute(GET_BLOCK_STORAGE_RECORDS).fetchall()
+    return [dict(project_id=r[0], instance_usage=r[1], volume_usage=r[2],
+                 backup_usage=r[3], timestamp=r[4]) for r in records]
+
+
+def archive_block_storage_record(project_id: str, timestamp: datetime):
+    with cursor() as cur:
+        cur.execute(ARCHIVE_BLOCK_STORAGE_RECORDS,
+                    dict(project_id=project_id, timestamp=timestamp))
+
+
+def archive_entry(instance_id: str, lower_timestamp: datetime, upper_timestamp: datetime):
+    """
+    Archives one record entry.
+    """
+    with cursor() as cur:
+        cur.execute(MIGRATE_RECORD_TO_ARCHIVE,
+                    dict(instance_id=instance_id, lower_ts=lower_timestamp, upper_ts=upper_timestamp))
+
+
+def get_entry_records():
+    with cursor() as cur:
+        records = cur.execute(GET_ENTRY_RECORDS).fetchall()
+    return [dict(project_id=r[0],
+                 instance_id=r[1],
+                 usage=r[3],
+                 start_time=r[4].lower,
+                 stop_time=r[4].upper,
+                 **r[2]) for r in records]

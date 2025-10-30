@@ -23,6 +23,12 @@ class OpenstackObjects:
     def get_servers(self):
         return self.connection.compute.servers(all_projects=True)
 
+    def get_volumes(self):
+        return self.connection.volume.volumes(all_projects=True)
+
+    def get_backups(self):
+        return self.connection.volume.backups(all_projects=True)
+
     def get_domains(self):
         return self.connection.identity.domains()
 

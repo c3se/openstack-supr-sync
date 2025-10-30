@@ -6,7 +6,8 @@ dependencies = ['requests',
                 'simplejson',
                 'python-openstackclient', # not sure which
                 'openstacksdk',           # one of these
-                'psycopg']                # need local database
+                'psycopg',                # need local database
+                'xmlschema']              # sgas help
 
 
 [tool.setuptools.packages.find]

@@ -35,6 +35,8 @@ MANIFEST
 *.json
 *.csv
 *.swp
+*.xml
+*.xsd
 
 clouds.yaml
 secrets.yaml

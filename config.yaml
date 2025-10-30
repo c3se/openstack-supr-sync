@@ -1,4 +1,9 @@
 cloud_name: dev-cirrus
+record_info:
+  center: c3se
+  resource: cirrus 
+  storage_resource: block
+  storage_media: disk
 database:
   name: test_db
   user: postgres
