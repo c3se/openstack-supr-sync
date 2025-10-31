@@ -1,17 +1,20 @@
 cloud_name: dev-cirrus
 record_info:
-  center: c3se
-  resource: cirrus 
-  storage_resource: block
+  center: SE-SNIC-C3SE
+  resource: cirrus.c3se.chalmers.se 
+  storage_resource: cirrus.c3se.chalmers.se
+  storage_share: block
   storage_media: disk
 database:
   name: test_db
   user: postgres
 supr:
-  api_base_url: https://disposer.c3se.chalmers.se/supr-test/api
-  #api_base_url: https://api.blender.c3se.chalmers.se/f/api
-  resource_id: '64'
-  storage_id: '63'
+  #api_base_url: https://disposer.c3se.chalmers.se/supr-test/api
+  #resource_id: '64'
+  #storage_id: '63'
+  api_base_url: https://api.blender.c3se.chalmers.se/f/api
+  resource_id: '100'
+  storage_id: '101'
 accounting:
   project_pattern: 'C3SE \d{4}/\d{2,3}-\d+'
 log_file: '/var/log/openstack-supr-sync.log'

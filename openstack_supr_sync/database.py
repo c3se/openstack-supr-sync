@@ -108,11 +108,12 @@ MIGRATE_ENTRIES_TO_RECORD = ("""
 # migrate record by record to archive on generating report
 MIGRATE_RECORD_TO_ARCHIVE = """
     WITH selected_row AS (
-        SELECT * FROM coin_usage_record
+        DELETE FROM coin_usage_record
         WHERE
             instance_id = %(instance_id)s
             AND
             measurement_range = tsrange(%(lower_ts)s, %(upper_ts)s)
+        RETURNING *
     )
     INSERT INTO coin_usage_archive (project_id, instance_id, metadata, usage, measurement_range)
     SELECT project_id, instance_id, metadata, usage, measurement_range
@@ -121,11 +122,12 @@ MIGRATE_RECORD_TO_ARCHIVE = """
 
 ARCHIVE_BLOCK_STORAGE_RECORDS = """
     WITH selected_rows AS (
-        SELECT * FROM block_storage_record
+        DELETE FROM block_storage_record
         WHERE
             project_id = %(project_id)s
             AND
             record_time = %(timestamp)s
+        RETURNING *
     )
     INSERT INTO block_storage_archive (project_id, instance_usage, volume_usage, backup_usage, record_time)
     SELECT project_id, instance_usage, volume_usage, backup_usage, record_time

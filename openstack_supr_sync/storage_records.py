@@ -15,6 +15,7 @@ connection = ConnectionManager(config['cloud_name'])
 openstack_objects = OpenstackObjects(connection)
 record_info = config['record_info']
 storage_media = record_info['storage_media']
+share = record_info['storage_share']
 center = record_info['center']
 resource = record_info['storage_resource']
 project_pattern = config['accounting']['project_pattern']
@@ -36,28 +37,27 @@ for r in records:
     sr = ET.SubElement(root, 'sr:StorageUsageRecord')
     now = datetime.now()
     create_time = now.strftime('%Y-%m-%dT%H:%M:%S')
-    record_id = f'{center}_{resource}_{r["project_id"]}_{now.strftime("%Y-%m-%dT%H:%M:%S")}'
-    record_id_element = ET.Element('cr:RecordIdentity')
+    record_id = f'{center}_{resource}_{r["project_id"]}_{now.strftime("%Y-%m-%dT%H:%M:%SZ")}'
+    record_id_element = ET.Element('sr:RecordIdentity')
     record_id_element.set('sr:createTime', create_time)
     record_id_element.set('sr:recordId', record_id)
     sr.append(record_id_element)
-
     subject_id = ET.SubElement(sr, 'sr:SubjectIdentity')
     local_group = ET.SubElement(subject_id, 'sr:LocalGroup')
     local_group.text = r['project_id']
     total_storage = r['instance_usage'] + r['volume_usage'] + r['backup_usage']
     total_storage *= 1024 ** 3
     pairs = {'StorageSystem': resource,
-             'StorageShare': 'BLOCK',
+             'StorageShare': share,
              'Site': center,
              'StorageMedia': storage_media,
-             'StartTime': r['timestamp'].strftime('%Y-%m-%dT%H:%M:%S'),
-             'EndTime': r['timestamp'].strftime('%Y-%m-%dT%H:%M:%S'),
-             'ResourceCapacityUsed': str(total_storage),
-             'LogicalCapacityUsed': str(total_storage),
+             'StartTime': r['timestamp'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+             'EndTime': r['timestamp'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+             'ResourceCapacityUsed': str(int(total_storage)),
+             'LogicalCapacityUsed': str(int(total_storage)),
              }
     for label, value in pairs.items():
         append_element(sr, 'sr:' + label, value)
     archive_block_storage_record(r['project_id'], r['timestamp'])
 tree = ET.ElementTree(root)
-tree.write(f'cloud_storage_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}')
+tree.write(f'cloud_storage_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')

@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from openstack_supr_sync.openstack_objects import OpenstackObjects
 from openstack_supr_sync.connection_manager import ConnectionManager
 from openstack_supr_sync.config import config
-from openstack_supr_sync.database import (migrate_usage_entries_to_record, get_entry_records)
+from openstack_supr_sync.database import (migrate_usage_entries_to_record, get_entry_records, archive_entry)
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -35,7 +35,7 @@ def append_element(stem, label, value):
 for r in records:
     cr = ET.SubElement(root, 'cr:CloudComputeRecord')
     now = datetime.now()
-    create_time = now.strftime('%Y-%m-%dT%H:%M:%S')
+    create_time = now.strftime('%Y-%m-%dT%H:%M:%SZ')
     record_id = f'{center}/{resource}/cr/{r["instance_id"]}/{now.timestamp()}'
     record_id_element = ET.Element('cr:RecordIdentity')
     record_id_element.set('cr:createTime', create_time)
@@ -46,9 +46,9 @@ for r in records:
              'Project': r['project_id'],
              'User': r['user'],
              'InstanceId': r['instance_id'],
-             'StartTime': r['start_time'].strftime('%Y-%m-%dT%H:%M:%S'),
-             'EndTime': r['stop_time'].strftime('%Y-%m-%dT%H:%M:%S'),
-             'Duration': f'PT{(r["stop_time"] - r["start_time"]).total_seconds()}S',
+             'StartTime': r['start_time'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+             'EndTime': r['stop_time'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+             'Duration': f'PT{(r["stop_time"] - r["start_time"]).total_seconds():f}S',
              'Region': 'N/A',
              'Zone': r['zone'],
              'Flavour': r['flavor'],
@@ -58,6 +58,7 @@ for r in records:
              'AllocatedDisk': str(r['allocated_disk'] * 1024 ** 3)}
     for label, value in pairs.items():
         append_element(cr, 'cr:' + label, value)
+    archive_entry(instance_id=r['instance_id'], lower_timestamp=r['start_time'],
+                  upper_timestamp=r['stop_time'])
 tree = ET.ElementTree(root)
-tree.write(f'cloud_compute_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}')
-
+tree.write(f'cloud_compute_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')
