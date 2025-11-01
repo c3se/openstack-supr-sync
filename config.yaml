@@ -16,6 +16,7 @@ supr:
   resource_id: '100'
   storage_id: '101'
 accounting:
-  project_pattern: 'C3SE \d{4}/\d{2,3}-\d+'
+  project_pattern: '^C3SE \d{4}/\d{2,3}-\d+'
 log_file: '/var/log/openstack-supr-sync.log'
 log_level: 'INFO'
+bad_word_list: '/var/lib/openstack-supr-sync/bad_words.json'

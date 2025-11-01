@@ -3,6 +3,7 @@ import itertools
 import logging
 import re
 from openstack_supr_sync.supr import SUPR, SUPRHTTPError
+from openstack_supr_sync.utils import yield_profanity_score
 from openstack_supr_sync.config import config
 from openstack_supr_sync.connection_manager import ConnectionManager
 from openstack_supr_sync.openstack_objects import OpenstackObjects
@@ -226,8 +227,9 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
             if not re.match(r'^[a-z0-9_-]+$', un):
                 continue
             if un not in openstack_user_names:
-                username = un
-                break
+                if yield_profanity_score(un) < 0.95:
+                    username = un
+                    break
         if username is None:
             base_username = ar.person.first_name[:8].lower()
             if base_username not in openstack_user_names:
