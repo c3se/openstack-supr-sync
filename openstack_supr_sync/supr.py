@@ -1,4 +1,4 @@
-import requests
+import httpx
 import simplejson
 from .config import config, secrets
 
@@ -49,11 +49,10 @@ class SUPR(object):
 
     def get(self, url, params=None):
         url = self.base_url + url
-
         try:
-            r = requests.get(url,
-                             auth=(self.user, self.password),
-                             params=params)
+            r = httpx.get(url,
+                          auth=(self.user, self.password),
+                          params=params)
         except Exception as e:
             raise SUPRHTTPError(0, str(e))
 
@@ -73,9 +72,9 @@ class SUPR(object):
         except Exception:
             raise SUPRBadJSON
 
-        r = requests.post(url,
-                          auth=(self.user, self.password),
-                          data=encoded_data)
+        r = httpx.post(url,
+                       auth=(self.user, self.password),
+                       data=encoded_data)
 
         if r.status_code == 200:
             try:
