@@ -22,6 +22,7 @@ since_time = datetime.now(tz=tz).replace(tzinfo=None) - timedelta(seconds=1)
 migrate_usage_entries_to_record(since_time=since_time)
 
 records = get_entry_records()
+xmlstrings = {}
 root = ET.Element('cr:CloudRecords')
 root.set('xmlns:cr', 'http://sams.snic.se/namespaces/2016/04/cloudrecords')
 
@@ -58,7 +59,11 @@ for r in records:
              'AllocatedDisk': str(r['allocated_disk'] * 1024 ** 3)}
     for label, value in pairs.items():
         append_element(cr, 'cr:' + label, value)
-    archive_entry(instance_id=r['instance_id'], lower_timestamp=r['start_time'],
-                  upper_timestamp=r['stop_time'])
+    xmlstrings[r['instance_id']] = ET.tostring(cr)
 tree = ET.ElementTree(root)
 tree.write(f'cloud_compute_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')
+for r in records:
+    archive_entry(instance_id=r['instance_id'],
+                  lower_timestamp=r['start_time'],
+                  upper_timestamp=r['stop_time'],
+                  xml_record=xmlstrings[r['instance_id']])

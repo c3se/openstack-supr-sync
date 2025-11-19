@@ -1,5 +1,5 @@
 [Unit]
-Description="Sync OpenStack with SUPR"
+Description="Create and push cloud coin usage records"
 
 [Timer]
 OnCalendar=*,37

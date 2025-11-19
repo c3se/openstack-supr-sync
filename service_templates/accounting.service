@@ -1,5 +1,5 @@
 [Unit]
-Description=Accounting service
+Description=Accounting service for cloud coin usage. Runs continuously.
 Requires=postgresql.service
 After=postgresql.service
 StartLimitInterval=200

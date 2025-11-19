@@ -23,6 +23,7 @@ project_pattern = config['accounting']['project_pattern']
 since_time = datetime.now(tz=tz).replace(tzinfo=None) - timedelta(seconds=1)
 
 records = get_block_storage_records()
+xmlstrings = {}
 root = ET.Element('sr:StorageUsageRecords')
 root.set('xmlns:sr', 'http://eu-emi.eu/namespaces/2011/02/storagerecord')
 
@@ -58,6 +59,9 @@ for r in records:
              }
     for label, value in pairs.items():
         append_element(sr, 'sr:' + label, value)
-    archive_block_storage_record(r['project_id'], r['timestamp'])
+    xmlstrings[r['project_id'] + r['timestamp'].strftime('%Y-%m-%dT%H:%M:%SZ')] = ET.tostring(sr)
 tree = ET.ElementTree(root)
 tree.write(f'cloud_storage_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')
+for r in records:
+    archive_block_storage_record(r['project_id'], r['timestamp'],
+                                 xmlstrings[r['project_id'] + r['timestamp'].strftime('%Y-%m-%dT%H:%M:%SZ')])
