@@ -8,8 +8,10 @@ with open(config['bad_word_list']) as file:
 
 
 def yield_string_slices(to_slice: str, to_compare: str):
+    # Pad to avoid edge effects
+    to_slice = '    ' + to_slice + '    '
     l1 = len(to_slice)
-    l2 = len(to_compare)
+    l2 = max(len(to_compare), 4)
     if l2 > l1:
         yield to_slice
         return
