@@ -252,6 +252,7 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
                     "resource_id": config['supr']['resource_id'],
                     "status": 'disabled'}
                 supr.post('/account/create/', params)
+                openstack_user_names.append(username)
         except SUPRHTTPError:
             openstack_objects.delete_user(openstack_user.id)
             logger.info("Cannot connect to SUPR, deleting user!")
