@@ -2,11 +2,11 @@ import datetime
 import itertools
 import logging
 import re
-from .supr import SUPR, SUPRHTTPError
-from .config import config
-from .connection_manager import ConnectionManager
-from .openstack_objects import OpenstackObjects
-from .database import get_usage_since_time
+from openstack_supr_sync.supr import SUPR, SUPRHTTPError
+from openstack_supr_sync.config import config
+from openstack_supr_sync.connection_manager import ConnectionManager
+from openstack_supr_sync.openstack_objects import OpenstackObjects
+from openstack_supr_sync.database import get_usage_since_time
 
 logger = logging.getLogger(__name__)
 

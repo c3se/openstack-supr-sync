@@ -3,13 +3,13 @@ import re
 import logging
 
 from time import time, sleep
-from .openstack_objects import OpenstackObjects
-from .connection_manager import ConnectionManager
-from .config import config, flavor_table
-from .database import update_usage, migrate_usage_entries_to_record
+from openstack_supr_sync.openstack_objects import OpenstackObjects
+from openstack_supr_sync.connection_manager import ConnectionManager
+from openstack_supr_sync.config import config, flavor_table
+from openstack_supr_sync.database import update_usage, migrate_usage_entries_to_record
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from .signal_handler import SignalHandler
+from openstack_supr_sync.signal_handler import SignalHandler
 
 tz = ZoneInfo('Europe/Stockholm')
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ while not signal_handler.shutdown_requested:
             logger.info(f'Update usage for project {p}: {project_accounting_table[p]} coins')
             update_usage(p, project_accounting_table[p], now)
         sleep_time = 0
-        local_timeout = max(0, 30 + start - time)
+        local_timeout = max(0, 30 + start - time())
         while not signal_handler.shutdown_requested:
             # Interruptible rest
             if sleep_time >= local_timeout:

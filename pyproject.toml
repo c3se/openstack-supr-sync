@@ -7,3 +7,7 @@ dependencies = ['requests',
                 'python-openstackclient', # not sure which
                 'openstacksdk',           # one of these
                 'psycopg']                # need local database
+
+
+[tool.setuptools.packages.find]
+exclude = ['service_templates*']
