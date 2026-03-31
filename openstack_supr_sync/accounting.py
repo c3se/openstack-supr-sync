@@ -4,7 +4,6 @@ import logging
 
 from time import time, sleep
 from openstack_supr_sync.openstack_objects import OpenstackObjects
-from openstack_supr_sync.connection_manager import ConnectionManager
 from openstack_supr_sync.config import config, flavor_table
 from openstack_supr_sync.database import update_usage
 from datetime import datetime
@@ -13,8 +12,7 @@ from openstack_supr_sync.signal_handler import SignalHandler
 
 tz = ZoneInfo('Europe/Stockholm')
 logger = logging.getLogger(__name__)
-connection = ConnectionManager(config['cloud_name'])
-openstack_objects = OpenstackObjects(connection)
+openstack_objects = OpenstackObjects(config['cloud_name'])
 
 project_pattern = config['accounting']['project_pattern']
 
@@ -33,7 +31,7 @@ while not signal_handler.shutdown_requested:
                     user=users[s.user_id],
                     zone=s.availability_zone,
                     allocated_cpu=s.flavor.vcpus,
-                    allocated_disk=s.flavor.disk + s.flavor.ephemeral,
+                    allocated_disk=s.flavor.disk + s.flavor.ephemeral + s.flavor.swap,
                     allocated_memory=s.flavor.ram,
                     state=s.status)
                for s in openstack_objects.get_servers() if s.project_id in projects_lookup]
@@ -46,7 +44,7 @@ while not signal_handler.shutdown_requested:
         else:
             cost = 0.
         update_usage(sd.pop('project'), sd.pop('instance_id'), sd, cost, now)
-    sleep_time = 0
+    sleep_time = 0.
     local_timeout = max(0, 30 + start - time())
     while not signal_handler.shutdown_requested:
         # Interruptible rest

@@ -3,7 +3,6 @@ import logging
 import xml.etree.ElementTree as ET
 
 from openstack_supr_sync.openstack_objects import OpenstackObjects
-from openstack_supr_sync.connection_manager import ConnectionManager
 from openstack_supr_sync.config import config
 from openstack_supr_sync.database import (migrate_usage_entries_to_record, get_entry_records, archive_entry)
 from datetime import datetime, timedelta
@@ -11,8 +10,7 @@ from zoneinfo import ZoneInfo
 
 tz = ZoneInfo('Europe/Stockholm')
 logger = logging.getLogger(__name__)
-connection = ConnectionManager(config['cloud_name'])
-openstack_objects = OpenstackObjects(connection)
+openstack_objects = OpenstackObjects(config['cloud_name'])
 record_info = config['record_info']
 center = record_info['center']
 resource = record_info['resource']

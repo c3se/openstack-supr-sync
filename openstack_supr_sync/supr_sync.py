@@ -5,14 +5,12 @@ import re
 from openstack_supr_sync.supr import SUPR, SUPRHTTPError
 from openstack_supr_sync.utils import get_profanity_score
 from openstack_supr_sync.config import config
-from openstack_supr_sync.connection_manager import ConnectionManager
 from openstack_supr_sync.openstack_objects import OpenstackObjects
 from openstack_supr_sync.database import get_usage_since_time
 
 logger = logging.getLogger(__name__)
 
-connection = ConnectionManager(config['cloud_name'])
-openstack_objects = OpenstackObjects(connection)
+openstack_objects = OpenstackObjects(config['cloud_name'])
 
 
 def import_project_members(supr_proj, openstack_project, supr_resource, dry_run=False):

@@ -1,14 +1,14 @@
 """ Draft of class for getting resources """
-from .connection_manager import ConnectionManager
-
+import openstack
 
 class OpenstackObjects:
-    def __init__(self, connection_manager=ConnectionManager):
-        self._connection_manager = connection_manager
+    def __init__(self, cloud):
+        self.cloud = cloud
+        self._connection = openstack.connect(cloud)
 
     @property
     def connection(self):
-        return self._connection_manager.connection
+        return self._connection
 
     @property
     def member(self):
