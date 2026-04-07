@@ -2,7 +2,7 @@
 Description="Create and push cloud coin usage records"
 
 [Timer]
-OnCalendar=*,37
+OnCalendar=*:37
 Unit=records.service
 
 [Install]

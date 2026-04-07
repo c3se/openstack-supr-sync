@@ -8,11 +8,11 @@ Environment="PYTHONIOENCODING=utf8"
 
 [Service]
 Type=oneshot
-Environment=OPENSTACK_SUPR_SYNC_CONFIG_PATH=/etc/openstack-supr-sync/config.yaml
-Environment=OPENSTACK_SUPR_SYNC_SECRETS_PATH=/etc/openstack-supr-sync/secrets.yaml
-WorkingDirectory=/opt/openstack-supr-sync
-ExecStart=/opt/openstack-supr-sync/records.py
-Restart=always
+Environment=OPENSTACK_SUPR_SYNC_CONFIG_PATH=/root/openstack-supr-sync/config.yaml
+Environment=OPENSTACK_SUPR_SYNC_FLAVOR_PATH=/root/openstack-supr-sync/flavor_table.yaml
+Environment=OPENSTACK_SUPR_SYNC_SECRETS_PATH=/root/openstack-supr-sync/secrets.yaml
+WorkingDirectory=/root/openstack-supr-sync
+ExecStart=/root/oss_venv/bin/python3 /root/openstack-supr-sync/openstack_supr_sync/records.py
 
 [Install]
 WantedBy=multi-user.target
