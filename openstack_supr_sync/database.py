@@ -34,7 +34,7 @@ CREATE_USAGE_ARCHIVE_TABLE = """
     metadata JSONB,
     usage DOUBLE PRECISION,
     measurement_range TSRANGE,
-    sgas_record TEXT);
+    xml_record TEXT);
     """
 
 CREATE_BLOCK_STORAGE_RECORD_TABLE = """
@@ -53,7 +53,7 @@ CREATE_BLOCK_STORAGE_ARCHIVE_TABLE = """
     volume_usage DOUBLE PRECISION,
     backup_usage DOUBLE PRECISION,
     record_time TIMESTAMP,
-    sgas_record TEXT);
+    xml_record TEXT);
     """
 
 CREATE_BLOCK_STORAGE_RECORD = """
@@ -117,8 +117,9 @@ MIGRATE_RECORD_TO_ARCHIVE = """
             measurement_range = tsrange(%(lower_ts)s, %(upper_ts)s)
         RETURNING *
     )
-    INSERT INTO coin_usage_archive (project_id, instance_id, metadata, usage, measurement_range, %(xmlstring)s)
-    SELECT project_id, instance_id, metadata, usage, measurement_range
+
+    INSERT INTO coin_usage_archive (project_id, instance_id, metadata, usage, measurement_range, xml_record)
+    SELECT selected_row.project_id, selected_row.instance_id, selected_row.metadata, selected_row.usage, selected_row.measurement_range, %(xmlstring)s
     FROM selected_row;
     """
 
@@ -131,8 +132,8 @@ ARCHIVE_BLOCK_STORAGE_RECORDS = """
             record_time = %(timestamp)s
         RETURNING *
     )
-    INSERT INTO block_storage_archive (project_id, instance_usage, volume_usage, backup_usage, record_time, %(xmlstring)s)
-    SELECT project_id, instance_usage, volume_usage, backup_usage, record_time
+    INSERT INTO block_storage_archive (project_id, instance_usage, volume_usage, backup_usage, record_time, xml_record)
+    SELECT selected_row.project_id, selected_row.instance_usage, selected_row.volume_usage, selected_row.backup_usage, selected_row.record_time, %(xmlstring)s
     FROM selected_rows;
     """
 
@@ -296,6 +297,8 @@ def get_block_storage_records():
 
 
 def archive_block_storage_record(project_id: str, timestamp: datetime, xmlstring: str):
+    if not isinstance(xmlstring, str):
+        xmlstring = xmlstring.decode()
     with cursor() as cur:
         cur.execute(ARCHIVE_BLOCK_STORAGE_RECORDS,
                     dict(project_id=project_id, timestamp=timestamp, xmlstring=xmlstring))
@@ -305,6 +308,8 @@ def archive_entry(instance_id: str, lower_timestamp: datetime, upper_timestamp: 
     """
     Archives one record entry.
     """
+    if not isinstance(xmlstring, str):
+        xmlstring = xmlstring.decode()
     with cursor() as cur:
         cur.execute(MIGRATE_RECORD_TO_ARCHIVE,
                     dict(instance_id=instance_id, lower_ts=lower_timestamp,

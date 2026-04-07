@@ -36,7 +36,7 @@ for r in records:
     cr = ET.SubElement(root, 'cr:CloudComputeRecord')
     now = datetime.now()
     create_time = now.strftime('%Y-%m-%dT%H:%M:%SZ')
-    record_id = f'{center}/{resource}/cr/{r["instance_id"]}/{now.timestamp()}'
+    record_id = f'{center}/{resource}/cr/{r["instance_id"]}/{now.timestamp():.0f}'
     record_id_element = ET.Element('cr:RecordIdentity')
     record_id_element.set('cr:createTime', create_time)
     record_id_element.set('cr:recordId', record_id)
@@ -65,4 +65,4 @@ for r in records:
     archive_entry(instance_id=r['instance_id'],
                   lower_timestamp=r['start_time'],
                   upper_timestamp=r['stop_time'],
-                  xml_record=xmlstrings[r['instance_id']])
+                  xmlstring=xmlstrings[r['instance_id']])

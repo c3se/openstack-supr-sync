@@ -18,6 +18,7 @@ supr:
     #resource_id: '100'
     #storage_id: '101'
 accounting:
+  sampling_frequency: 30  # in seconds
   project_pattern: '^C3SE \d{4}/\d{2,3}-\d+'
   spool_directory: '/var/spool/openstack-supr-sync/'
 log_file: '/var/log/openstack-supr-sync.log'

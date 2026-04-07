@@ -13,6 +13,7 @@ from openstack_supr_sync.signal_handler import SignalHandler
 tz = ZoneInfo('Europe/Stockholm')
 logger = logging.getLogger(__name__)
 openstack_objects = OpenstackObjects(config['cloud_name'])
+max_time = config['accounting']['sampling_frequency']
 
 project_pattern = config['accounting']['project_pattern']
 
@@ -45,7 +46,7 @@ while not signal_handler.shutdown_requested:
             cost = 0.
         update_usage(sd.pop('project'), sd.pop('instance_id'), sd, cost, now)
     sleep_time = 0.
-    local_timeout = max(0, 30 + start - time())
+    local_timeout = max(0, max_time + start - time())
     while not signal_handler.shutdown_requested:
         # Interruptible rest
         if sleep_time >= local_timeout:
