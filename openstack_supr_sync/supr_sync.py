@@ -125,7 +125,7 @@ def disable_and_enable_openstack_accounts(dry_run=False, verbose=False):
     }
     try:
         supr_projects = supr.get('/project/search/', params=params)
-        supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
+        supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}/')
     except SUPRHTTPError as e:
         # We want to show the text received if we get an HTTP Error
         logger.info("HTTP error {0} from SUPR:".format(e.status_code))
@@ -159,7 +159,7 @@ def import_supr_projects(dry_run=False, verbose=False):
     }
     try:
         supr_projects = supr.get('/project/search/', params=params)
-        supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
+        supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}/')
     except SUPRHTTPError as e:
         # We want to show the text received if we get an HTTP Error
         logger.info("HTTP error {0} from SUPR:".format(e.status_code))
@@ -191,7 +191,7 @@ def update_account_in_supr(dry_run=False, verbose=False):
     supr = SUPR()
     openstack_accounts = openstack_objects.get_users()
     # Get Resource including account information from SUPR
-    supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
+    supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}/')
     supr_set = {(a.username, a.status) for a in supr_resource.accounts}
     supr_names = [a.username for a in supr_resource.accounts]
     status_map = {True: 'enabled', False: 'disabled'}
@@ -213,7 +213,7 @@ def update_account_in_supr(dry_run=False, verbose=False):
 
 def import_users_from_account_requests(dry_run=False, verbose=False):
     supr = SUPR()
-    supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}')
+    supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}/')
     openstack_users = openstack_objects.get_users()
     openstack_user_names = [o.name for o in openstack_users]
     for ar in supr_resource.accountrequests:

@@ -148,10 +148,13 @@ GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME = """
                                       UPPER(measurement_range) > %s
                                   ORDER BY UPPER(measurement_range);
                                   """
+
+database_host = config['database']['host']
+database_port = config['database']['port']
 database_name = config['database']['name']
 database_user = config['database']['user']
 database_password = secrets['database']['password']
-with psycopg.connect(f'user={database_user} password={database_password}') as conn:
+with psycopg.connect(f'host={database_host} port={database_port} user={database_user} password={database_password}') as conn:
     conn.autocommit = True
     cur = conn.cursor()
     cur.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s", (database_name,))
@@ -166,7 +169,7 @@ def cursor():
     """
     Convenience context manager for psycopg.
     """
-    with psycopg.connect(f'user={database_user} password={database_password} dbname={database_name}') as conn:
+    with psycopg.connect(f'host={database_host} port={database_port} user={database_user} password={database_password}') as conn:
         with conn.cursor() as cur:
             yield cur
 

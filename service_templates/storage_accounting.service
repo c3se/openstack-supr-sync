@@ -10,9 +10,9 @@ Environment="PYTHONIOENCODING=utf8"
 Type=oneshot
 Environment=OPENSTACK_SUPR_SYNC_CONFIG_PATH=/etc/openstack-supr-sync/config.yaml
 Environment=OPENSTACK_SUPR_SYNC_SECRETS_PATH=/etc/openstack-supr-sync/secrets.yaml
-WorkingDirectory=/opt/openstack-supr-sync
-ExecStart=/opt/openstack-supr-sync/storage_accounting.py
-ExecStart=/opt/openstack-supr-sync/storage_records.py
+WorkingDirectory=/root/openstack-supr-sync
+ExecStart=/root/openstack-supr-sync/.venv/bin/python3 /root/openstack-supr-sync/openstack_supr_sync/storage_accounting.py
+ExecStart=/root/openstack-supr-sync/.venv/bin/python3 /root/openstack-supr-sync/openstack_supr_sync/storage_records.py
 Restart=always
 
 [Install]

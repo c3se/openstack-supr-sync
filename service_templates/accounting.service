@@ -1,7 +1,5 @@
 [Unit]
 Description=Accounting service for cloud coin usage. Runs continuously.
-Requires=postgresql.service
-After=postgresql.service
 StartLimitInterval=200
 StartLimitBurst=5
 
@@ -11,7 +9,7 @@ Environment=OPENSTACK_SUPR_SYNC_CONFIG_PATH=/root/openstack-supr-sync/config.yam
 Environment=OPENSTACK_SUPR_SYNC_FLAVOR_PATH=/root/openstack-supr-sync/flavor_table.yaml
 Environment=OPENSTACK_SUPR_SYNC_SECRETS_PATH=/root/openstack-supr-sync/secrets.yaml
 WorkingDirectory=/root/openstack-supr-sync
-ExecStart=/root/oss_venv/bin/python3 /root/openstack-supr-sync/openstack_supr_sync/accounting.py
+ExecStart=/root/openstack-supr-sync/.venv/bin/python3 /root/openstack-supr-sync/openstack_supr_sync/accounting.py
 Restart=always
 RestartSec=5
 

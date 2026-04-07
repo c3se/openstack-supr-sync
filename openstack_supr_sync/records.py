@@ -15,6 +15,7 @@ record_info = config['record_info']
 center = record_info['center']
 resource = record_info['resource']
 project_pattern = config['accounting']['project_pattern']
+spool_dir = config['accounting']['spool_directory']
 
 since_time = datetime.now(tz=tz).replace(tzinfo=None) - timedelta(seconds=1)
 migrate_usage_entries_to_record(since_time=since_time)
@@ -59,7 +60,7 @@ for r in records:
         append_element(cr, 'cr:' + label, value)
     xmlstrings[r['instance_id']] = ET.tostring(cr)
 tree = ET.ElementTree(root)
-tree.write(f'cloud_compute_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')
+tree.write(f'{spool_dir}/cloud_compute_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')
 for r in records:
     archive_entry(instance_id=r['instance_id'],
                   lower_timestamp=r['start_time'],

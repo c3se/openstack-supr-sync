@@ -1,14 +1,16 @@
 [project]
 name = "openstack_supr_sync"
 version = "0.1.0"
-dependencies = ['httpx',
-                'pyyaml',
-                'simplejson',
-                'python-openstackclient', # not sure which
-                'openstacksdk',           # one of these
-                'psycopg',                # need local database
-                'xmlschema',              # sgas help
-                'levenshtein']            # word similarity score
+dependencies = [
+    'httpx',
+    'pyyaml',
+    'simplejson',
+    'python-openstackclient', # not sure which
+    'openstacksdk',           # one of these
+    "psycopg[binary,pool]",                # need local database
+    'xmlschema',              # sgas help
+    'levenshtein',
+]            # word similarity score
 
 
 [tool.setuptools.packages.find]
