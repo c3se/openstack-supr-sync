@@ -133,7 +133,7 @@ ARCHIVE_BLOCK_STORAGE_RECORDS = """
         RETURNING *
     )
     INSERT INTO block_storage_archive (project_id, instance_usage, volume_usage, backup_usage, record_time, xml_record)
-    SELECT selected_row.project_id, selected_row.instance_usage, selected_row.volume_usage, selected_row.backup_usage, selected_row.record_time, %(xmlstring)s
+    SELECT selected_rows.project_id, selected_rows.instance_usage, selected_rows.volume_usage, selected_rows.backup_usage, selected_rows.record_time, %(xmlstring)s
     FROM selected_rows;
     """
 

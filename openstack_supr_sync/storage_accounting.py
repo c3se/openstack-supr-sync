@@ -20,7 +20,7 @@ users = {u.id: u.name for u in openstack_objects.get_users()}
 projects_lookup = {project.id: project.name for project in projects}
 now = datetime.now(tz=tz).replace(tzinfo=None)
 servers = [dict(project=projects_lookup[s.project_id],
-                size=s.flavor.disk + s.flavor.ephemeral)
+                size=s.flavor.disk * (1 - any([f.delete_on_termination for f in s.volumes])) + s.flavor.ephemeral)
            for s in openstack_objects.get_servers() if s.project_id in projects_lookup]
 volumes = [dict(project=projects_lookup[s.project_id], size=s.size)
            for s in openstack_objects.get_volumes() if s.project_id in projects_lookup]

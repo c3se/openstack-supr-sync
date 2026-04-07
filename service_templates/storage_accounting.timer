@@ -2,7 +2,7 @@
 Description="Carry out storage accounting and reporting"
 
 [Timer]
-OnCalendar=*,19
+OnCalendar=*:19
 Unit=storage_accounting.service
 
 [Install]
