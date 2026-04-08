@@ -176,6 +176,13 @@ def import_supr_projects(dry_run=False, verbose=False):
             openstack_project = openstack_projects[supr_project.name]
         else:
             openstack_project = openstack_objects.create_project(supr_project.name)
+            try:
+                openstack_objects.make_router_for_project(openstack_project.id)
+            except Exception as e:
+                logger.error("Failed in setting up project network, deleting project and exiting!")
+                project_id = openstack_project.id
+                openstack_objects.delete_project_and_network(project_id)
+                raise e
         import_project_members(supr_project, openstack_project, supr_resource, dry_run)
 
 

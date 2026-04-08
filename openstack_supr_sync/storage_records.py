@@ -17,6 +17,7 @@ share = record_info['storage_share']
 center = record_info['center']
 resource = record_info['storage_resource']
 project_pattern = config['accounting']['project_pattern']
+spool_dir = config['accounting']['spool_directory']
 
 since_time = datetime.now(tz=tz).replace(tzinfo=None) - timedelta(seconds=1)
 
@@ -59,7 +60,7 @@ for r in records:
         append_element(sr, 'sr:' + label, value)
     xmlstrings[r['project_id'] + r['timestamp'].strftime('%Y-%m-%dT%H:%M:%SZ')] = ET.tostring(sr)
 tree = ET.ElementTree(root)
-tree.write(f'cloud_storage_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')
+tree.write(f'{spool_dir}/cloud_storage_{datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}.xml')
 for r in records:
     archive_block_storage_record(r['project_id'], r['timestamp'],
                                  xmlstrings[r['project_id'] + r['timestamp'].strftime('%Y-%m-%dT%H:%M:%SZ')])

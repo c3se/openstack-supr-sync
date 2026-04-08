@@ -1,5 +1,7 @@
 """ Draft of class for getting resources """
 import openstack
+from openstack_supr_sync.config import config
+network_config = config['network']
 
 class OpenstackObjects:
     def __init__(self, cloud):
@@ -99,7 +101,7 @@ class OpenstackObjects:
             return self.connection.identity.get_project(name)
 
     def get_project(self, project_id):
-        return self.connection.identity.get_project_by_id(project_id)
+        return self.connection.identity.get_project(project_id)
 
     def get_project_members(self, project):
         user_ids = [c['user']['id']
@@ -139,3 +141,40 @@ class OpenstackObjects:
         """
         return self.connection.identity.unassign_project_role_from_user(
             project_id, user_id, self.member)
+
+    def make_router_for_project(self, project_id):
+        """
+        Sets up an internal network with an external gateway for the project.
+        """
+        project = self.get_project(project_id)
+        network_name = f'{project.name} IPv4 Network'
+        subnet_name = f'{project.name} IPv4 Subnet'
+        router_name = f'{project.name} IPv4 Router'
+        external_gateway = self.connection.network.find_network(network_config['external_network'])
+        network = self.connection.network.create_network(name=network_name, project_id=project_id)
+        subnet = self.connection.network.create_subnet(name=subnet_name, network_id=network.id, ip_version=4, dns_nameservers=[network_config['external_dns']], gateway_ip=network_config['internal_gateway'], cidr=network_config['internal_cidr'], project_id=project_id)
+        router = self.connection.network.create_router(name=router_name, project_id=project_id)
+        self.connection.network.add_gateway_to_router(router, external_gateway=external_gateway)
+        self.connection.network.add_interface_to_router(router=router, subnet_id=subnet.id)
+
+    def delete_project_and_networks(self, project_id):
+        """ Deletes project and cleans up any network objects. """
+        self.connection.identity.delete_project(project_id)
+        ports = self.connection.network.ports(project_id=project_id)
+        for pt in ports:
+            if pt.device_owner != 'network:dhcp':
+                for fip in pt.fixed_ips:
+                    try:
+                        self.connection.network.remove_interface_from_router(pt.device_id, fip['subnet_id'], pt.id)
+                    except Exception:
+                        pass
+            self.connection.network.delete_port(pt.id)
+        routers = self.connection.network.routers(project_id=project_id)
+        for rt in routers:
+            self.connection.network.delete_router(rt.id)
+        subnets = self.connection.network.subnets(project_id=project_id)
+        for sn in subnets:
+            self.connection.network.delete_subnet(sn.id)
+        networks = self.connection.network.networks(project_id=project_id)
+        for nw in networks:
+            self.connection.network.delete_network(nw.id)
