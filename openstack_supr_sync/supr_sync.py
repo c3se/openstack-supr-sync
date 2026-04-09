@@ -85,7 +85,6 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
     openstack_projects = {
         o.name: o.id for o in openstack_objects.get_projects()
         if o.name in supr_project_names}
-    print(supr_project_allocations)
     for p, p_id in openstack_projects.items():
         openstack_objects.set_project_storage_quota(
             p_id,
