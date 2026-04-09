@@ -32,3 +32,4 @@ network:
   external_dns: 129.16.1.53
   internal_gateway: 10.10.10.1
   internal_cidr: 10.10.10.0/24
+  external_gateway_ip: 129.16.122.1

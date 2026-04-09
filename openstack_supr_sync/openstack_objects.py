@@ -1,7 +1,10 @@
 """ Draft of class for getting resources """
 import openstack
+import logging
 from openstack_supr_sync.config import config
 network_config = config['network']
+
+logger = logging.getLogger(__name__)
 
 class OpenstackObjects:
     def __init__(self, cloud):
@@ -36,6 +39,11 @@ class OpenstackObjects:
 
     def get_services(self):
         return self.connection.identity.services()
+
+    def get_instances(self, project_id):
+        if project_id is None:
+            return self.connection.compute.servers(all_projects=True)
+        return self.connection.compute.servers(all_projects=True, project_id=project_id)
 
     def set_project_storage_quota(self,
                                   project_id,
@@ -151,30 +159,77 @@ class OpenstackObjects:
         subnet_name = f'{project.name} IPv4 Subnet'
         router_name = f'{project.name} IPv4 Router'
         external_gateway = self.connection.network.find_network(network_config['external_network'])
+        eg_subnet = list(self.connection.network.subnets(network_id=external_gateway.id))[0]
         network = self.connection.network.create_network(name=network_name, project_id=project_id)
-        subnet = self.connection.network.create_subnet(name=subnet_name, network_id=network.id, ip_version=4, dns_nameservers=[network_config['external_dns']], gateway_ip=network_config['internal_gateway'], cidr=network_config['internal_cidr'], project_id=project_id)
-        router = self.connection.network.create_router(name=router_name, project_id=project_id)
-        self.connection.network.add_gateway_to_router(router, external_gateway=external_gateway)
+        subnet = self.connection.network.create_subnet(
+                name=subnet_name,
+                network_id=network.id,
+                ip_version=4,
+                dns_nameservers=[network_config['external_dns']],
+                gateway_ip=network_config['internal_gateway'],
+                cidr=network_config['internal_cidr'],
+                project_id=project_id)
+        gateway_info = dict(network_id=external_gateway.id, enable_snat=True)
+        router = self.connection.network.create_router(name=router_name, project_id=project_id, external_gateway_info=gateway_info)
         self.connection.network.add_interface_to_router(router=router, subnet_id=subnet.id)
 
-    def delete_project_and_networks(self, project_id):
-        """ Deletes project and cleans up any network objects. """
+    def delete_user(self, user_id):
+        logger.info("Deleting user {user_id}")
+        self.connection.identity.delete_user(user_id)
+
+    def delete_project_with_cleanup(self, project_id, force=False):
+        """ Deletes a project and cleans up associated resources like
+        networks, instances, etc. 
+
+        
+        project_id
+            ID of the project to be deleted.
+        force
+            If True, uses the "--force" option to delete instances.
+            Default is false.
+        """
+        logger.info(f'Cleaning up project {project_id}')
+        self.delete_project_instances(project_id, force=force)
+        self.delete_project_networks(project_id)
+        logger.info(f'Deleting project {project_id}')
         self.connection.identity.delete_project(project_id)
+
+    def delete_project_instances(self, project_id, force=False):
+        """ Deletes instances attached to project """
+        instances = self.get_instances(project_id)
+        logger.info(f'Cleaning up instances of {project_id}')
+        for ii in instances:
+            logger.info(f'Deleting instance {ii.id}')
+            self.connection.compute.delete_server(ii, force=force)
+
+    def delete_project_networks(self, project_id):
+        """ Deletes project and cleans up any network objects. """
+        logger.info(f'Cleaning up IP addresses of {project_id}')
+        ips = self.connection.network.ips(project_id=project_id)
+        for ip in ips:
+            self.connection.network.delete_ip(ip)
         ports = self.connection.network.ports(project_id=project_id)
+        logger.info(f'Cleaning up ports of {project_id}')
         for pt in ports:
             if pt.device_owner != 'network:dhcp':
                 for fip in pt.fixed_ips:
                     try:
                         self.connection.network.remove_interface_from_router(pt.device_id, fip['subnet_id'], pt.id)
-                    except Exception:
+                    except Exception as e:
+                        logger.info(f'Could not delete interface  ({pt.device_id}, {fip["subnet_id"]}, {pt.id}) due to:\n'
+                                    f'{e}')
                         pass
             self.connection.network.delete_port(pt.id)
         routers = self.connection.network.routers(project_id=project_id)
+        logger.info(f'Cleaning up routers of {project_id}')
         for rt in routers:
             self.connection.network.delete_router(rt.id)
         subnets = self.connection.network.subnets(project_id=project_id)
+        logger.info(f'Cleaning up subnets of {project_id}')
         for sn in subnets:
             self.connection.network.delete_subnet(sn.id)
         networks = self.connection.network.networks(project_id=project_id)
+        logger.info(f'Cleaning up networks of {project_id}')
         for nw in networks:
+            logger.info(f'Deleting network {nw.id}')
             self.connection.network.delete_network(nw.id)
