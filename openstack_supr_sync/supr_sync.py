@@ -81,21 +81,22 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
                 storage = r
         # TiB to GiB
         supr_project_allocations[name] = dict(coins=resource.allocated,
-                                              storage=storage.allocated * 1000)
+                                              storage=storage.allocated)
     openstack_projects = {
         o.name: o.id for o in openstack_objects.get_projects()
         if o.name in supr_project_names}
+    print(supr_project_allocations)
     for p, p_id in openstack_projects.items():
         openstack_objects.set_project_storage_quota(
             p_id,
             storage_in_gb=supr_project_allocations[p]['storage'],
-            number_of_snapshots=100,
-            number_of_volumes=100,
-            number_of_backups=100)
+            number_of_snapshots=config['quota']['storage_number'],
+            number_of_volumes=config['quota']['storage_number'],
+            number_of_backups=config['quota']['storage_number'])
     current_time = datetime.datetime.now()
     past_time = current_time - datetime.timedelta(days=30)
-    limited_quota = dict(cores=1, instances=1, ram=2048)
-    default_quota = dict(cores=256, instances=256, ram=2048*256*4)
+    limited_quota = config['quota']['limited']
+    default_quota = config['quota']['default']
     for p, p_id in openstack_projects.items():
         usage = get_usage_since_time(p_id, past_time)
         if usage is None:
@@ -107,7 +108,7 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
             logger.info(f'Allocation: {supr_project_allocations[p]["coins"]} coins per 30 days')
             logger.info(f'Usage: {usage} for the past 30 days')
 
-        if usage > float(supr_project_allocations[p]['coins']):
+        if usage > float(supr_project_allocations[p]['coins']) - config['quota']['threshold']:
             quota = limited_quota
             if verbose:
                 logger.info(f'Limiting quota for project {p}')
@@ -269,3 +270,4 @@ if __name__ == '__main__':
     disable_and_enable_openstack_accounts(verbose=True)
     disable_expired_projects(verbose=True)
     update_account_in_supr(verbose=True)
+    update_project_openstack_quotas(verbose=True)

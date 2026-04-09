@@ -23,6 +23,17 @@ accounting:
   sampling_frequency: 900  # in seconds
   project_pattern: '^C3SE \d{4}/\d-\d+'
   spool_directory: '/var/spool/openstack-supr-sync/'
+quota:
+  storage_number: 100 # number of volumes/backups/snapshots
+  default: # Normal usage limited
+    cores: 256
+    instances: 256
+    ram: 2097152
+  limited: # Usage limits after exceeding allocation
+    cores: 1
+    instances: 1
+    ram: 2048
+  threshold: -100 # Threshold in coins at which limited quota is enforced
 log_file: '/var/log/openstack-supr-sync.log'
 log_level: 'INFO'
 bad_word_list: '/var/lib/openstack-supr-sync/bad_words.json'
