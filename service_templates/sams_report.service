@@ -1,0 +1,13 @@
+[Unit]
+Description="Push records to SAMS"
+
+[Service]
+Type=oneshot
+SyslogIdentifier=sams-report
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/report_to_sams.sh
+
+[Install]
+WantedBy=multi-user.target

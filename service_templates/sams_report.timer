@@ -1,0 +1,9 @@
+[Unit]
+Description="Push SAMS records"
+
+[Timer]
+OnCalendar=*-*-* 05:49:11
+Unit=sams_report.service
+
+[Install]
+WantedBy=multi-user.target

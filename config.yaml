@@ -1,8 +1,11 @@
 cloud_name: dev-cirrus
+# cloud_name: cirrus
 record_info:
   center: SE-SNIC-C3SE
-  resource: cirrus.c3se.chalmers.se 
-  storage_resource: cirrus.c3se.chalmers.se
+  resource: dev-cirrus.c3se.chalmers.se 
+  storage_resource: dev-cirrus.c3se.chalmers.se
+  # resource: cirrus.c3se.chalmers.se 
+  # storage_resource: cirrus.c3se.chalmers.se
   storage_share: block
   storage_media: disk
 database:
@@ -14,12 +17,8 @@ supr:
   api_base_url: https://api.supr.naiss.se/api
   resource_id: 111
   storage_id: 112
-  #api_base_url: https://disposer.c3se.chalmers.se/supr-test/api
-  #resource_id: '64'
-  #storage_id: '63'
-  #api_base_url: https://api.blender.c3se.chalmers.se/f/api
-    #resource_id: '100'
-    #storage_id: '101'
+  # resource_id: 109
+  # storage_id: 110
 accounting:
   sampling_frequency: 900  # in seconds
   project_pattern: '^C3SE \d{4}/\d-\d+'
@@ -32,4 +31,3 @@ network:
   external_dns: 129.16.1.53
   internal_gateway: 10.10.10.1
   internal_cidr: 10.10.10.0/24
-  external_gateway_ip: 129.16.122.1
