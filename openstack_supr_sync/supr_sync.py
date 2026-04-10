@@ -2,6 +2,7 @@ import datetime
 import itertools
 import logging
 import re
+import string
 from openstack_supr_sync.supr import SUPR, SUPRHTTPError
 from openstack_supr_sync.utils import get_profanity_score
 from openstack_supr_sync.config import config
@@ -223,25 +224,30 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
     supr_resource = supr.get(f'/resource/{config["supr"]["resource_id"]}/')
     openstack_users = openstack_objects.get_users()
     openstack_user_names = [o.name for o in openstack_users]
+    username_regexp = re.compile(r'^[a-z][a-z0-9]+$')
+    anum = string.ascii_lowercase + string.digits
     for ar in supr_resource.accountrequests:
         username = None
         if ar.status.lower() != 'active':
             continue
         for un in ar.requested_usernames:
             un = un.lower()
-            if not re.match(r'^[a-z0-9_-]+$', un):
+            un = [c for c in un if c in anum]
+            if not username_regexp.match(un):
                 continue
             if un not in openstack_user_names:
                 if get_profanity_score(un) < 0.95:
                     username = un
                     break
         if username is None:
-            base_username = ar.person.first_name[:8].lower()
+            stripped_first_name = [c for c in ar.person.first_name.lower() if c in string.ascii_lowercase]
+            base_username = stripped_first_name[:16]
+            
             if base_username not in openstack_user_names:
                 username = base_username
             else:
                 for i in itertools.count(0, 1):
-                    username = base_username + str(i)
+                    username = base_username + str(i) + 1
                     if username not in openstack_user_names:
                         break
         try:
