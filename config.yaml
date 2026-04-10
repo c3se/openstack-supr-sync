@@ -42,3 +42,13 @@ network:
   external_dns: 129.16.1.53
   internal_gateway: 10.10.10.1
   internal_cidr: 10.10.10.0/24
+email:
+  headers:
+    From: dev-cirrus@c3se.chalmers.se
+    Bcc: 'leoniel@chalmers.se'
+    subject: 'New account {username} on Cirrus @ C3SE'
+    Reply-To: 'noreply@c3se.chalmers.se'
+  smtp_server: localhost
+  local_hostname: dev-cirrus-sync.c3se.chalmers.se
+  url: 'https://dev-cloud.swesrc.chalmers.se'
+  support_url: 'https://supr.naiss.se/support/?problem_type=accessing&centre_resource=c6'

@@ -6,6 +6,7 @@ import string
 from openstack_supr_sync.supr import SUPR, SUPRHTTPError
 from openstack_supr_sync.utils import get_profanity_score
 from openstack_supr_sync.config import config
+from openstack_supr_sync.mail import send_account_email
 from openstack_supr_sync.openstack_objects import OpenstackObjects
 from openstack_supr_sync.database import get_usage_since_time
 
@@ -232,7 +233,7 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
             continue
         for un in ar.requested_usernames:
             un = un.lower()
-            un = [c for c in un if c in anum]
+            un = ''.join([c for c in un if c in anum])
             if not username_regexp.match(un):
                 continue
             if un not in openstack_user_names:
@@ -240,14 +241,14 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
                     username = un
                     break
         if username is None:
-            stripped_first_name = [c for c in ar.person.first_name.lower() if c in string.ascii_lowercase]
+            stripped_first_name = ''.join([c for c in ar.person.first_name.lower() if c in string.ascii_lowercase])
             base_username = stripped_first_name[:16]
             
             if base_username not in openstack_user_names:
                 username = base_username
             else:
                 for i in itertools.count(0, 1):
-                    username = base_username + str(i) + 1
+                    username = base_username + str(i + 1)
                     if username not in openstack_user_names:
                         break
         try:
@@ -257,16 +258,22 @@ def import_users_from_account_requests(dry_run=False, verbose=False):
             if not dry_run:
                 openstack_user = openstack_objects.create_user(username,
                                                                status='disabled')
+                openstack_user_names.append(username)
                 params = {
                     "username": username,
                     "person_id": ar.person.id,
                     "resource_id": config['supr']['resource_id'],
-                    "status": 'disabled'}
+                    "status": 'enabled'}
                 supr.post('/account/create/', params)
-                openstack_user_names.append(username)
         except SUPRHTTPError:
             openstack_objects.delete_user(openstack_user.id)
+            if username in openstack_user_names:
+                openstack_user_names.remove(username)
             logger.info("Cannot connect to SUPR, deleting user!")
+            continue
+        send_account_email(name=f'{ar.person.first_name} {ar.person.last_name}',
+                           username=username,
+                           To=ar.person.email)
 
 
 if __name__ == '__main__':
