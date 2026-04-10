@@ -29,7 +29,7 @@ while not signal_handler.shutdown_requested:
     servers = [dict(instance_id=s.id,
                     flavor=s.flavor.name,
                     project=projects_lookup[s.project_id],
-                    user=users[s.user_id],
+                    user=users.get(s.user_id, ''),
                     zone=s.availability_zone,
                     allocated_cpu=s.flavor.vcpus,
                     allocated_disk=s.flavor.disk + s.flavor.ephemeral + s.flavor.swap,
