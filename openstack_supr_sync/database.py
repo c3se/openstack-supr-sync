@@ -143,7 +143,7 @@ GET_ENTRY_RECORDS_BY_PROJECT_ID = "SELECT * FROM coin_usage_record WHERE project
 GET_ENTRY_RECORDS = "SELECT * FROM coin_usage_record"
 GET_BLOCK_STORAGE_RECORDS = "SELECT * FROM block_storage_record"
 GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME = """
-                                  SELECT * FROM coin_usage_record
+                                  SELECT * FROM coin_usage_archive
                                   WHERE
                                       project_id = %s AND
                                       UPPER(measurement_range) > %s
@@ -192,7 +192,7 @@ def get_entry_by_project_id(project_id):
     if result is None:
         return None
     return [dict(project_id=r[0], instance_id=r[1], metadata=r[2], usage=r[3],
-                 measurement_range=r[4]) for r in result]
+                 measurement_range=r[5]) for r in result]
 
 
 def get_entry_records_by_project_id(project_id):
@@ -235,7 +235,7 @@ def get_usage_since_time(project_id: str, since_time: datetime):
         records = cur.execute(GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME, (project_id, since_time)).fetchall()
     records = last_entries + [dict(usage=r[3],
                                    measurement_range=r[4]) for r in records]
-    records = sorted(records, lambda r: r['measurement_range'].upper)
+    records = sorted(records, key=lambda r: r['measurement_range'].upper)
     if len(records) > 0:
         for entry in records[1:]:
             total_usage += entry['usage'] * estimate_fraction(entry)

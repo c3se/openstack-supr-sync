@@ -40,7 +40,7 @@ while not signal_handler.shutdown_requested:
     for sd in servers:
         logger.info(f'Server {sd["flavor"]}: {sd["project"]}, cost {flavor_table[sd["flavor"]]}')
         # third argument is a dict that becomes a jsonb blob and is extracted at reporting time
-        if sd.pop('state').lower() == 'active':
+        if sd.pop('state').lower() != 'shelved_offloaded':
             cost = flavor_table[sd["flavor"]]
         else:
             cost = 0.

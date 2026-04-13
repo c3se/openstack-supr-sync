@@ -99,7 +99,7 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
     limited_quota = config['quota']['limited']
     default_quota = config['quota']['default']
     for p, p_id in openstack_projects.items():
-        usage = get_usage_since_time(p_id, past_time)
+        usage = get_usage_since_time(p, past_time)
         if usage is None:
             if not dry_run:
                 openstack_objects.set_project_quota(p, default_quota)

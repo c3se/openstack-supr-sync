@@ -31,7 +31,7 @@ quota:
     ram: 2097152
   limited: # Usage limits after exceeding allocation
     cores: 1
-    instances: 1
+    instances: 256 # Openstack counts even shelved instances
     ram: 2048
   threshold: -100 # Threshold in coins at which limited quota is enforced
 log_file: '/var/log/openstack-supr-sync.log'
