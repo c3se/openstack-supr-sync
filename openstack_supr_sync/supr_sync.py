@@ -65,6 +65,46 @@ def disable_expired_projects(dry_run=False, verbose=False):
             openstack_objects.update_project(
                 openstack_projects[supr_project.name], is_enabled=False)
 
+def compute_storage_use(projects):
+    projects_lookup = {value: key for key, value in projects.items()}
+    os_servers = [s for s in openstack_objects.get_servers() if s.project_id in projects_lookup]
+    servers_list = [(projects_lookup[s.project_id], s.flavor.disk * (1 - any([f.delete_on_termination for f in s.volumes])) + s.flavor.ephemeral)
+               for s in os_servers]
+    servers = {p: 0 for p in projects}
+    for k, v in servers_list:
+        servers[k] += v
+    os_volumes = [s for s in openstack_objects.get_volumes() if s.project_id in projects_lookup]
+    os_volumes += [s for s in openstack_objects.get_snapshots() if s.project_id in projects_lookup]
+    volumes_list = [(projects_lookup[s.project_id], s.size) for s in os_volumes]
+    volumes = {p: 0 for p in projects}
+    number_of_volumes = {p: 0 for p in projects}
+    for k, v in volumes_list:
+        volumes[k] += v
+        number_of_volumes[k] += 1
+    os_backups = [s for s in openstack_objects.get_backups() if s.project_id in projects_lookup]
+    backup_list = [(projects_lookup[s.project_id], s.size) for s in os_backups]
+    backups = {p: 0 for p in projects}
+    number_of_backups = {p: 0 for p in projects}
+    for k, v in backup_list:
+        backups[k] += v
+        number_of_backups[k] += 1
+    os_snapshots = [s for s in openstack_objects.get_vm_snapshots() if s.metadata['owner_id'] in projects_lookup]
+    snapshots_list = [(projects_lookup[s.metadata['owner_id']], s.size // (1024 ** 3) ) for s in os_snapshots]
+    snapshots = {p: 0 for p in projects}
+    number_of_snapshots = {p: 0 for p in snapshots}
+    for k, v in snapshots_list:
+        snapshots[k] += v
+        number_of_snapshots[k] += 1
+
+    project_accounting_table = {project: {'total': 0, 'max': 0} for project in projects}
+    for p in projects:
+        project_accounting_table[p]['total'] = servers.get(p, 0) +  volumes.get(p, 0) + backups.get(p, 0) + snapshots.get(p, 0)
+        project_accounting_table[p]['max'] = max([servers.get(p, 0), volumes.get(p, 0), backups.get(p, 0), snapshots.get(p, 0)])
+        project_accounting_table[p]['number_of_volumes'] = number_of_volumes[p]
+        project_accounting_table[p]['number_of_backups'] = number_of_backups[p]
+        project_accounting_table[p]['number_of_snapshots'] = number_of_snapshots[p]
+    return project_accounting_table
+        
 
 def update_project_openstack_quotas(dry_run=False, verbose=False):
     supr = SUPR()
@@ -88,16 +128,17 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
         o.name: o.id for o in openstack_objects.get_projects()
         if o.name in supr_project_names}
     for p, p_id in openstack_projects.items():
-        openstack_objects.set_project_storage_quota(
-            p_id,
-            storage_in_gb=supr_project_allocations[p]['storage'],
+        storage_quota = dict(storage_in_gb=supr_project_allocations[p]['storage'],
             number_of_snapshots=config['quota']['storage_number'],
             number_of_volumes=config['quota']['storage_number'],
             number_of_backups=config['quota']['storage_number'])
+        openstack_objects.set_project_storage_quota(
+            p_id, **storage_quota)
     current_time = datetime.datetime.now()
     past_time = current_time - datetime.timedelta(days=30)
     limited_quota = config['quota']['limited']
     default_quota = config['quota']['default']
+    storage_table = compute_storage_use(openstack_projects)
     for p, p_id in openstack_projects.items():
         usage = get_usage_since_time(p, past_time)
         if usage is None:
@@ -106,8 +147,8 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
             continue
         if verbose:
             logger.info(f'Project: {p} [{p_id}]')
-            logger.info(f'Allocation: {supr_project_allocations[p]["coins"]} coins per 30 days')
-            logger.info(f'Usage: {usage} for the past 30 days')
+            logger.info(f'allocation: {supr_project_allocations[p]["coins"]} coins per 30 days')
+            logger.info(f'usage: {usage} for the past 30 days')
 
         if usage > float(supr_project_allocations[p]['coins']) - config['quota']['threshold']:
             quota = limited_quota
@@ -115,9 +156,30 @@ def update_project_openstack_quotas(dry_run=False, verbose=False):
                 logger.info(f'Limiting quota for project {p}')
         else:
             quota = default_quota
+
+
         if not dry_run:
             openstack_objects.set_project_quota(p, quota)
 
+        if verbose:
+            logger.info(f'allocation: {supr_project_allocations[p]["storage"]} GBs')
+            logger.info(f'usage: {storage_table[p]["total"]}')
+
+        storage_quota = dict(storage_in_gb=supr_project_allocations[p]['storage'],
+            number_of_snapshots=config['quota']['storage_number'],
+            number_of_volumes=config['quota']['storage_number'],
+            number_of_backups=config['quota']['storage_number'])
+        if storage_table[p]['total'] > storage_quota['storage_in_gb']:
+            storage_quota['storage_in_gb'] = storage_table[p]['max'] + 1
+            storage_quota['number_of_snapshots'] =  storage_table[p]['number_of_snapshots'] 
+            storage_quota['number_of_backups'] =  storage_table[p]['number_of_backups'] 
+            storage_quota['number_of_volumes'] = storage_table[p]['number_of_volumes']
+            if verbose:
+                logger.info(f'Limiting storage quota for project {p}')
+            if not dry_run:
+                openstack_objects.set_project_storage_quota(
+                    p_id,
+                    **storage_quota)
 
 def disable_and_enable_openstack_accounts(dry_run=False, verbose=False):
     supr = SUPR()

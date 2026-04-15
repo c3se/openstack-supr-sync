@@ -24,15 +24,20 @@ servers = [dict(project=projects_lookup[s.project_id],
            for s in openstack_objects.get_servers() if s.project_id in projects_lookup]
 volumes = [dict(project=projects_lookup[s.project_id], size=s.size)
            for s in openstack_objects.get_volumes() if s.project_id in projects_lookup]
+volumes += [dict(project=projects_lookup[s.project_id], size=s.size)
+           for s in openstack_objects.get_snapshots() if s.project_id in projects_lookup]
 backup = [dict(project=projects_lookup[s.project_id], size=s.size)
           for s in openstack_objects.get_backups() if s.project_id in projects_lookup]
+snapshots = [dict(project=projects_lookup[s.metadata['owner_id']], size=s.size // (1024 ** 3))
+          for s in openstack_objects.get_vm_snapshots() if s.metadata['owner_id'] in projects_lookup]
 project_accounting_table = {project.name: 0 for project in projects}
 
 for p in projects:
     instance_size = sum([s['size'] for s in servers if p.name == s['project']])
     backup_size = sum([s['size'] for s in volumes if p.name == s['project']])
     volume_size = sum([s['size'] for s in backup if p.name == s['project']])
+    snapshot_size = sum([s['size'] for s in snapshots if p.name == s['project']])
     logger.info(
         (f'Recording storage amount for project {p}: Instance {instance_size} GB,'
-         f'volume {volume_size} GB, backup {backup_size} GB.'))
-    create_block_storage_record(p.name, instance_size, backup_size, volume_size, now)
+         f'volume {volume_size} GB, backup {backup_size} GB, snapshots {snapshot_size} GB.'))
+    create_block_storage_record(p.name, instance_size, backup_size, volume_size, snapshot_size, now)

@@ -45,7 +45,7 @@ for r in records:
     subject_id = ET.SubElement(sr, 'sr:SubjectIdentity')
     local_group = ET.SubElement(subject_id, 'sr:LocalGroup')
     local_group.text = r['project_id']
-    total_storage = r['instance_usage'] + r['volume_usage'] + r['backup_usage']
+    total_storage = r['instance_usage'] + r['volume_usage'] + r['backup_usage'] + r['snapshot_usage']
     total_storage *= 1024 ** 3
     pairs = {'StorageSystem': resource,
              'StorageShare': share,

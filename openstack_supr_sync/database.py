@@ -43,6 +43,7 @@ CREATE_BLOCK_STORAGE_RECORD_TABLE = """
     instance_usage DOUBLE PRECISION,
     volume_usage DOUBLE PRECISION,
     backup_usage DOUBLE PRECISION,
+    snapshot_usage DOUBLE PRECISION,
     record_time TIMESTAMP);
     """
 
@@ -52,15 +53,16 @@ CREATE_BLOCK_STORAGE_ARCHIVE_TABLE = """
     instance_usage DOUBLE PRECISION,
     volume_usage DOUBLE PRECISION,
     backup_usage DOUBLE PRECISION,
+    snapshot_usage DOUBLE PRECISION,
     record_time TIMESTAMP,
     xml_record TEXT);
     """
 
 CREATE_BLOCK_STORAGE_RECORD = """
     INSERT INTO block_storage_record
-    (project_id, instance_usage, volume_usage, backup_usage,
+    (project_id, instance_usage, volume_usage, backup_usage, snapshot_usage,
     record_time)
-    VALUES (%s, %s, %s, %s, %s);
+    VALUES (%s, %s, %s, %s, %s, %s);
     """
 
 CREATE_USAGE_ENTRY = """
@@ -140,8 +142,8 @@ ARCHIVE_BLOCK_STORAGE_RECORDS = """
             record_time = %(timestamp)s
         RETURNING *
     )
-    INSERT INTO block_storage_archive (project_id, instance_usage, volume_usage, backup_usage, record_time, xml_record)
-    SELECT selected_rows.project_id, selected_rows.instance_usage, selected_rows.volume_usage, selected_rows.backup_usage, selected_rows.record_time, %(xmlstring)s
+    INSERT INTO block_storage_archive (project_id, instance_usage, volume_usage, backup_usage, snapshot_usage, record_time, xml_record)
+    SELECT selected_rows.project_id, selected_rows.instance_usage, selected_rows.volume_usage, selected_rows.backup_usage, selected_rows.snapshot_usage, selected_rows.record_time, %(xmlstring)s
     FROM selected_rows;
     """
 
@@ -289,19 +291,19 @@ def migrate_usage_entries_to_record(since_time: datetime):
 
 
 def create_block_storage_record(project_id: str, instance_usage: float,
-                                volume_usage: float, backup_usage: float,
+        volume_usage: float, backup_usage: float, snapshot_usage: float,
                                 timestamp: datetime):
     with cursor() as cur:
         cur.execute(CREATE_BLOCK_STORAGE_RECORD,
                     (project_id, instance_usage, volume_usage,
-                     backup_usage, timestamp))
+                     backup_usage, snapshot_usage, timestamp))
 
 
 def get_block_storage_records():
     with cursor() as cur:
         records = cur.execute(GET_BLOCK_STORAGE_RECORDS).fetchall()
     return [dict(project_id=r[0], instance_usage=r[1], volume_usage=r[2],
-                 backup_usage=r[3], timestamp=r[4]) for r in records]
+                 backup_usage=r[3], snapshot_usage=r[4], timestamp=r[5]) for r in records]
 
 
 def archive_block_storage_record(project_id: str, timestamp: datetime, xmlstring: str):

@@ -31,6 +31,13 @@ class OpenstackObjects:
     def get_volumes(self):
         return self.connection.volume.volumes(all_projects=True)
 
+    def get_snapshots(self):
+        return self.connection.volume.snapshots(all_projects=True)
+
+    def get_vm_snapshots(self):
+        images = self.connection.compute.images()
+        return [i for i in images if i.metadata.get('image_type', '') == 'snapshot']
+    
     def get_backups(self):
         return self.connection.volume.backups(all_projects=True)
 
