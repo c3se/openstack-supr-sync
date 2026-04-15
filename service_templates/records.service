@@ -1,5 +1,5 @@
 [Unit]
-Description="Sync from SUPR"
+Description="Push Openstack usage records"
 
 [Service]
 Type=oneshot

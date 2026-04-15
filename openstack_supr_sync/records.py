@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 from openstack_supr_sync.openstack_objects import OpenstackObjects
 from openstack_supr_sync.config import config
-from openstack_supr_sync.database import (migrate_usage_entries_to_record, get_entry_records, archive_entry)
+from openstack_supr_sync.database import (migrate_usage_entries_to_record, get_entry_records, archive_entry, clean_old_entries)
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -19,6 +19,7 @@ spool_dir = config['accounting']['spool_directory']
 
 since_time = datetime.now(tz=tz).replace(tzinfo=None) - timedelta(seconds=1)
 migrate_usage_entries_to_record(since_time=since_time)
+clean_old_entries()
 
 records = get_entry_records()
 xmlstrings = {}

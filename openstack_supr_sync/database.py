@@ -123,6 +123,14 @@ MIGRATE_RECORD_TO_ARCHIVE = """
     FROM selected_row;
     """
 
+CLEAN_OLD_ENTRIES = """
+    DELETE FROM coin_usage
+    WHERE
+        usage = 0
+        AND
+        UPPER(measurement_range) < %(yesterday)s;
+"""
+
 ARCHIVE_BLOCK_STORAGE_RECORDS = """
     WITH selected_rows AS (
         DELETE FROM block_storage_record
@@ -325,3 +333,12 @@ def get_entry_records():
                  start_time=r[4].lower,
                  stop_time=r[4].upper,
                  **r[2]) for r in records]
+
+def clean_old_entries():
+    """
+    Clean up old coin_usage entries where all usage has already been archived and
+    there is no new activity for the last 23h. No practical need to track last_measurement beyond
+    this point.
+    """
+    with cursor() as cur:
+        cur.execute(CLEAN_OLD_ENTRIES, dict(yesterday=(datetime.now() - timedelta(hours=23))))
