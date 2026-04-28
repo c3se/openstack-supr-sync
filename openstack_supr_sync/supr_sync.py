@@ -241,6 +241,7 @@ def import_supr_projects(dry_run=False, verbose=False):
         else:
             openstack_project = openstack_objects.create_project(supr_project.name)
             try:
+                openstack_objects.set_default_network_quota(openstack_project.id)
                 openstack_objects.make_router_for_project(openstack_project.id)
             except Exception as e:
                 logger.error("Failed in setting up project network, deleting project and exiting!")

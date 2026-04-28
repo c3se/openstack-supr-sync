@@ -34,6 +34,13 @@ quota:
     instances: 256 # Openstack counts even shelved instances
     ram: 2048
   threshold: -100 # Threshold in coins at which limited quota is enforced
+  network:
+    floating_ips: 5
+    security_groups: 10
+    security_group_rules: 50
+    networks: 10
+    ports: 50
+    routers: 10
 log_file: '/var/log/openstack-supr-sync.log'
 log_level: 'INFO'
 bad_word_list: '/var/lib/openstack-supr-sync/bad_words.json'

@@ -3,6 +3,7 @@ import openstack
 import logging
 from openstack_supr_sync.config import config
 network_config = config['network']
+quota_config = config['quota']
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,36 @@ class OpenstackObjects:
             kwargs['backups'] = number_of_backups
         return self.connection.block_storage.update_quota_set(
             project_id, **kwargs)
+
+    def set_default_network_quota(self, project_id):
+        network_quota = quota_config['network']
+        self.set_project_network_quota(project_id, **network_quota)
+
+    def set_project_network_quota(
+            self,
+            project_id,
+            floating_ips=None,
+            security_groups=None,
+            security_group_rules=None,
+            networks=None,
+            ports=None,
+            routers=None):
+        kwargs = {}
+        if floating_ips is not None:
+            kwargs['floating_ips'] = floating_ips
+        if security_groups is not None:
+            kwargs['security_groups'] = security_groups
+        if security_group_rules is not None:
+            kwargs['security_group_rules'] = security_group_rules
+        if networks is not None:
+            kwargs['networks'] = networks
+        if ports is not None:
+            kwargs['ports'] = ports
+        if routers is not None:
+            kwargs['routers'] = routers
+        return self.connection.network.update_quota(
+            project_id, **kwargs)
+
 
     def set_project_vm_quota(self,
                              project_id,
