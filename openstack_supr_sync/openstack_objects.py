@@ -197,7 +197,6 @@ class OpenstackObjects:
         subnet_name = f'{project.name} IPv4 Subnet'
         router_name = f'{project.name} IPv4 Router'
         external_gateway = self.connection.network.find_network(network_config['external_network'])
-        eg_subnet = list(self.connection.network.subnets(network_id=external_gateway.id))[0]
         network = self.connection.network.create_network(name=network_name, project_id=project_id)
         subnet = self.connection.network.create_subnet(
                 name=subnet_name,
