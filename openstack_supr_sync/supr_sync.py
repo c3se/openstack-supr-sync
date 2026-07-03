@@ -25,7 +25,7 @@ def import_project_members(supr_proj, openstack_project, supr_resource, dry_run=
     supr_account_set = set(supr_accounts)
     openstack_id_dict = {u.name: u.id for u in openstack_objects.get_users()}
     openstack_account_set = {u for u in openstack_objects.get_project_members(openstack_project)}
-    users_to_remove = openstack_account_set - supr_account_set
+    users_to_remove = (openstack_account_set - supr_account_set) & set(all_accounts.values())
     users_to_add = supr_account_set - openstack_account_set
 
     for user in users_to_remove:
@@ -88,7 +88,7 @@ def compute_storage_use(projects):
     for k, v in backup_list:
         backups[k] += v
         number_of_backups[k] += 1
-    os_snapshots = [s for s in openstack_objects.get_vm_snapshots() if s.metadata['owner_id'] in projects_lookup]
+    os_snapshots = [s for s in openstack_objects.get_vm_snapshots() if s.metadata.get('owner_id', '') in projects_lookup]
     snapshots_list = [(projects_lookup[s.metadata['owner_id']], s.size // (1024 ** 3) ) for s in os_snapshots]
     snapshots = {p: 0 for p in projects}
     number_of_snapshots = {p: 0 for p in snapshots}
@@ -246,7 +246,7 @@ def import_supr_projects(dry_run=False, verbose=False):
             except Exception as e:
                 logger.error("Failed in setting up project network, deleting project and exiting!")
                 project_id = openstack_project.id
-                openstack_objects.delete_project_and_network(project_id)
+                openstack_objects.delete_project_with_cleanup(project_id)
                 raise e
         import_project_members(supr_project, openstack_project, supr_resource, dry_run)
 

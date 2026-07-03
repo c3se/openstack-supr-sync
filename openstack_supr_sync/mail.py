@@ -15,8 +15,7 @@ plaintext_template = """
 Dear {name},
 
 an account with username {username} has been created for you on
-Cirrus @ C3SE. You can log in to it via {url}, selecting
-"Authenticate via c3se keycloak" from the drop-down list.
+Cirrus @ C3SE. You can log in to it via {url}.
 You do not need a password, as you will authenticate via SUPR.
 
 For questions, please use the SUPR support form at {support_url}.

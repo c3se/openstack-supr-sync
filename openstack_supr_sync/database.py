@@ -238,8 +238,6 @@ def get_usage_since_time(project_id: str, since_time: datetime):
         return min(max(dt2 / dt1, 0), 1.)
 
     last_entries = get_entry_by_project_id(project_id)
-    if len(last_entries) == 0:
-        return None
     total_usage = 0.
     with cursor() as cur:
         records = cur.execute(GET_ENTRY_RECORDS_BY_PROJECT_ID_SINCE_TIME, (project_id, since_time)).fetchall()
@@ -247,7 +245,7 @@ def get_usage_since_time(project_id: str, since_time: datetime):
                                    measurement_range=r[4]) for r in records]
     records = sorted(records, key=lambda r: r['measurement_range'].upper)
     if len(records) > 0:
-        for entry in records[1:]:
+        for entry in records:
             total_usage += entry['usage'] * estimate_fraction(entry)
     return total_usage
 
